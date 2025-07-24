@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
   // const uri = process.env.MONGO_URI;
-  const uri = "mongodb+srv://nileshahir286:55F0jUoOC2Cj7c5D@gauabhayaranyam.bwkbrlp.mongodb.net/gauabhayaranyam?retryWrites=true&w=majority;"
+  const uri = "mongodb+srv://nileshahir286:55F0jUoOC2Cj7c5D@gauabhayaranyam.bwkbrlp.mongodb.net/gauabhayaranyam"
 
 console.log(`MOGO_URI:`,uri);
 
