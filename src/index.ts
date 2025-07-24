@@ -1,7 +1,11 @@
 import express from "express";
 import dotenv from "dotenv";
 import userRoutes from "./routes/userRoutes"
+import connectDB from "./config/db";
 dotenv.config();
+
+connectDB(); // Connect to MongoDB
+
 
 const app = express();
 const PORT = process.env.PORT || 7000;
