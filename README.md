@@ -1,0 +1,2 @@
+# typscript
+sample ts
