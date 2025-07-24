@@ -11,4 +11,21 @@ export const getUsers = async (req: Request, res: Response) => {
   }
 };
 
-export default getUsers;
+export const addUser = async (req: Request, res: Response) => {
+  const { id, name, email } = req.body;
+
+  if (!id || !name || !email) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  try {
+    const newUser = new User({ id, name, email });
+    await newUser.save();
+    res.status(201).json(newUser);
+  } catch (error) {
+    console.error("Error adding user:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export default { getUsers, addUser };
