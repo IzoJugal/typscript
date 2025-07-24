@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 7000;
 
 app.use(express.json());
-app.use("/api/users", userRoutes);
+app.use("/api", userRoutes);
 
 app.get("/", (req, res) => {
   res.send("Welcome to the API 6000 ts");
