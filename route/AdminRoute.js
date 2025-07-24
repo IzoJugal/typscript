@@ -121,8 +121,6 @@ router.post("/upload-logo", upload.single("logo"), controller.uploadLogo);
 
 router.get("/logos", controller.logoGet);
 
-router.get("/logo/:filename", controller.getLogo)
-
 //Impacts Data
 router.route("/impacts").get(adminMiddleware, controller.getImpacts);
 

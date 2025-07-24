@@ -1684,92 +1684,38 @@ const uploadLogo = async (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ message: "No file uploaded" });
 
-    // Check for existing logo in DB
-    const existingLogo = await Logo.findOne();
-    if (existingLogo) {
-      const oldFile = await conn.db.collection("uploads.files").findOne({
-        filename: existingLogo.filename,
-      });
-      if (oldFile) {
-        await gfs.delete(new mongoose.Types.ObjectId(oldFile._id)); // Delete the old logo from GridFS
+    // Delete previous logo if it exists
+    const oldLogo = await Logo.findOne();
+    if (oldLogo) {
+      const oldPath = path.join(__dirname, "..", oldLogo.url);
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
       }
-      await Logo.deleteMany(); // Remove all logo metadata
+      await Logo.deleteMany();
     }
 
-    // Upload new logo to GridFS
-    const filename = `${Date.now()}-${file.originalname}`;
-    const uploadStream = gfs.openUploadStream(filename, {
-      contentType: file.mimetype,
-    });
-
-    uploadStream.end(file.buffer);
-
-    await new Promise((resolve, reject) => {
-      uploadStream.on("finish", resolve);
-      uploadStream.on("error", reject);
-    });
-
-    // Save reference in Logo collection
+    // Save new logo
     const newLogo = new Logo({
-      filename, // GridFS file name
-      fileId: uploadStream.id, // Save the fileId (this is the important part)
+      url: `/uploads/${file.filename}`,
       title: req.body.title || "Logo",
     });
 
     await newLogo.save();
-
     res
       .status(201)
       .json({ success: true, message: "Logo uploaded", data: newLogo });
   } catch (err) {
     console.error("Upload failed:", err);
-    res.status(500).json({
-      success: false,
-      message: "Logo upload failed",
-      error: err.message,
-    });
+    res.status(500).json({ success: false, message: "Logo upload failed", error: err.message });
   }
 };
 
 const logoGet = async (req, res) => {
   try {
     const logo = await Logo.findOne().sort({ createdAt: -1 });
-    res.status(200).json({
-      success: true,
-      message: "Logo fetched successfully",
-      data: logo || null,
-    });
+    res.status(200).json({ success: true, message: "Logo fetched successfully", data: logo || null });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: "Error fetching logo",
-      error: err.message,
-    });
-  }
-};
-
-const getLogo = async (req, res) => {
-  try {
-    const logo = await Logo.findOne();  
-    if (!logo) {
-      return res.status(404).json({ message: "Logo not found" });
-    }
-
-    const file = await gfs.find({ filename: logo.filename }).toArray();
-    if (!file || file.length === 0) {
-      return res.status(404).json({ message: "File not found in GridFS" });
-    }
-
-    const fileId = file[0]._id;  
-    const readStream = gfs.openDownloadStream(fileId); 
-    
-    res.set("Content-Type", file[0].contentType);
-
-    readStream.pipe(res);
-    
-  } catch (err) {
-    console.error("Error fetching logo:", err);
-    res.status(500).json({ message: "Error fetching logo", error: err.message });
+    res.status(500).json({ success: false, message: "Error fetching logo", error: err.message });
   }
 };
 
