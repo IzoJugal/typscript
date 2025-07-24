@@ -1,27 +1,33 @@
 {
-  "name": "typescript",
+  "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
-    "start": "npm run build && node dist/index.js"
+    "start": "node dist/server.js",
+    "dev": "nodemon server.js",
+    "build": "babel . --out-dir dist --ignore node_modules,test"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^17.2.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.0.0",
     "express": "^5.1.0",
-    "mongoose": "^8.16.4"
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.16.1",
+    "multer": "^2.0.1",
+    "nodemailer": "^7.0.4",
+    "twilio": "^5.7.1",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.3",
-    "@types/mongoose": "^5.11.97",
-    "@types/node": "^24.1.0",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.3"
+    "@babel/cli": "^7.28.0",
+    "@babel/core": "^7.28.0",
+    "@babel/preset-env": "^7.28.0",
+    "nodemon": "^3.1.10"
   }
 }

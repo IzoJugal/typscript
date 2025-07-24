@@ -1,0 +1,1384 @@
+import mongoose from "mongoose"
+import User from "../Model/AuthModel.js"
+import Donation from "../Model/DonationModel.js"
+import VolunteerTask from "../Model/TaskModel.js"
+import Slider from "../Model/SliderModel.js"
+import Logo from "../Model/Logo.js"
+import Gaudaan from "../Model/GaudaanModel.js"
+import Impact from "../Model/Impact.js"
+import crypto from "crypto"
+import bcrypt from "bcryptjs"
+import jwt from "jsonwebtoken"
+import axios from "axios"
+
+// Volunteer data
+export const volunteerSignup = async (req, res) => {
+  let { firstName, lastName, phone, email, password, otp, method } = req.body;
+
+  // Input validation
+  if (!firstName) {
+    console.log("Validation Error: Missing First Name");
+    return res.status(400).json({ message: "Missing First Name" });
+  }
+  if (!lastName) {
+    console.log("Validation Error: Missing Last Name");
+    return res.status(400).json({ message: "Missing Last Name" });
+  }
+  if (!email) {
+    console.log("Validation Error: Missing Email");
+    return res.status(400).json({ message: "Missing Email" });
+  }
+  if (!phone) {
+    console.log("Validation Error: Missing Phone Number");
+    return res.status(400).json({ message: "Missing Phone Number" });
+  }
+  if (!password) {
+    console.log("Validation Error: Missing Password");
+    return res.status(400).json({ message: "Missing Password" });
+  }
+  if (!otp || !method) {
+    console.log("Validation Error: Missing OTP or method");
+    return res.status(400).json({ message: "OTP and method required" });
+  }
+
+  try {
+    email = email.toLowerCase();
+
+    // ❌ OTP validation skipped for now (commented out)
+// 🧠 OTP Validation
+    // const key = `${email}-${phone}`;
+    // const storedOTP = otpStore.get(key);
+
+    // if (!storedOTP) {
+    //   return res.status(400).json({ message: "OTP not found or expired" });
+    // }
+
+    // if (Date.now() > storedOTP.expiresAt) {
+    //   otpStore.delete(key);
+    //   return res.status(400).json({ message: "OTP expired" });
+    // }
+
+    // if (storedOTP.otp !== otp) {
+    //   return res.status(400).json({ message: "Invalid OTP" });
+    // }
+
+    // otpStore.delete(key); // ✅ Clear OTP after verification
+
+    // ❌ Check for existing user
+    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email or phone already in use" });
+    }
+
+    // ✅ Enforce only 'volunteer' role
+    const validRoles = ["volunteer"];
+
+    // ✅ Create the user
+    const newUser = await User.create({
+      firstName,
+      lastName,
+      phone,
+      email,
+      password, // Ensure password hashing is handled in your schema
+      roles: validRoles,
+    });
+
+    // 🔐 Generate JWT
+    const payload = {
+      userId: newUser._id,
+      email: newUser.email,
+      roles: newUser.roles,
+    };
+
+    const token = jwt.sign(payload, "gauabhayaranyam5000", {
+      expiresIn: "7d",
+    });
+
+
+    // ✅ Success response
+    res.status(200).json({
+      success: true,
+      message: "Volunteer registered successfully",
+      token,
+      user: {
+        _id: newUser._id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        phone: newUser.phone,
+        email: newUser.email,
+        roles: newUser.roles,
+        createdAt: newUser.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("Signup Error:", err);
+    res.status(500).json({success: false, message: "Server error during signup",error: err.message });
+  }
+};
+
+// User Data
+export const signUpAuth = async (req, res) => {
+  let { firstName, lastName, phone, email, password, otp, method, roles } =
+    req.body;
+
+  // Input validation
+  if (!firstName)
+    return res.status(400).json({ message: "Missing First Name" });
+  if (!lastName) return res.status(400).json({ message: "Missing Last Name" });
+  if (!email) return res.status(400).json({ message: "Missing Email" });
+  if (!phone) return res.status(400).json({ message: "Missing Phone Number" });
+  if (!password) return res.status(400).json({ message: "Missing Password" });
+  if (!otp || !method)
+    return res.status(400).json({ message: "OTP and method required" });
+
+  try {
+    email = email.toLowerCase(); // ✅ Safe lowercase
+
+    // 🧠 OTP Validation
+    // const key = `${email}-${phone}`;
+    // const storedOTP = otpStore.get(key);
+
+    // if (!storedOTP) {
+    //   return res.status(400).json({ message: "OTP not found or expired" });
+    // }
+
+    // if (Date.now() > storedOTP.expiresAt) {
+    //   otpStore.delete(key);
+    //   return res.status(400).json({ message: "OTP expired" });
+    // }
+
+    // if (storedOTP.otp !== otp) {
+    //   return res.status(400).json({ message: "Invalid OTP" });
+    // }
+
+    // otpStore.delete(key); // ✅ Clear OTP after verification
+
+    // ❌ Check for existing user
+    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email or phone already in use" });
+    }
+
+    // ✅ Handle roles (with whitelist)
+    if (typeof roles === "string") {
+      roles = [roles];
+    }
+
+    const allowedRoles = ["user", "admin", "dealer"];
+    const validRoles = Array.isArray(roles)
+      ? roles.filter((role) => allowedRoles.includes(role))
+      : ["user"];
+
+    if (validRoles.includes("admin")) {
+      return res
+        .status(400)
+        .json({ message: "Cannot assign admin role directly" });
+    }
+
+    // ✅ Create the user
+    const newUser = await User.create({
+      firstName,
+      lastName,
+      phone,
+      email,
+      password, // Assuming you're hashing password via Mongoose pre-save hook
+      roles: validRoles,
+    });
+
+    // 🔐 Generate JWT
+    const payload = {
+      userId: newUser._id,
+      email: newUser.email,
+      roles: newUser.roles,
+    };
+
+    const token = jwt.sign(payload, "gauabhayaranyam5000", {
+      expiresIn: "7d",
+    });
+
+    // ✅ Success response
+    res.status(200).json({
+      success: true,
+      message: "User registered successfully",
+      token,
+      user: {
+        _id: newUser._id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        phone: newUser.phone,
+        email: newUser.email,
+        roles: newUser.roles,
+        createdAt: newUser.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("Signup Error Stack:", err); // shows full trace
+    res
+      .status(500)
+      .json({ success: false, message: "Server error during signup", error: err.message });
+  }
+};
+
+export const otpStore = new Map();
+
+export const sendSMSOTP = async (phone, otp) => {
+  const msg = `Your Gauabhayaranya OTP is: ${otp}. It expires in 5 minutes.`;
+
+  const response = await axios.post(
+    "https://control.msg91.com/api/v5/flow/",
+    {
+      flow_id: process.env.MSG91_FLOW_ID, // Template ID from MSG91
+      sender: process.env.MSG91_SENDER_ID,
+      mobiles: `91${phone}`, // Assuming Indian numbers
+      VAR1: otp, // Replace with template variables (e.g., {{VAR1}})
+    },
+    {
+      headers: {
+        authkey: process.env.MSG91_AUTH_KEY,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  return response.data;
+};
+
+export const sendOTPAuth = async (req, res) => {
+  const { phone, method } = req.body;
+
+  if (!phone) {
+    return res.status(400).json({ message: "Phone number required" });
+  }
+
+  try {
+    const existingUser = await User.findOne({ phone });
+    if (existingUser) {
+      return res.status(400).json({ message: "Phone already in use" });
+    }
+
+    const otp = 1234; // 🔐 Static OTP for testing
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+
+    const key = `${phone}`;
+    otpStore.set(key, { otp, expiresAt });
+
+    if (method === "phone") {
+      console.log(`Sending OTP to ${phone}: ${otp}`); // 👀 For dev only
+      await sendSMSOTP(phone, otp);
+    } else {
+      return res.status(400).json({ message: "Invalid OTP method" });
+    }
+
+    return res.status(200).json({ success: true, message: `OTP sent via ${method}` });
+  } catch (err) {
+    console.error("Send OTP Error:", err);
+    return res.status(500).json({ success: false, message: "Server error while sending OTP", error: err.message });
+  }
+};
+
+export const signInAuth = async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid password" });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, roles: user.roles },
+      "gauabhayaranyam5000",
+      { expiresIn: "1d" } // Token expires in 1 Day
+    );
+
+    // Return response with token, user, and role
+    res.status(200).json({
+      success: true,
+      message: "Sign-in successful",
+      token,
+      user: {
+        id: user._id, // Or `_id: user._id` to match frontend
+        name: user.firstName,
+        email: user.email,
+        roles: user.roles || "user", // Ensure role is included
+        roles: user.roles || [user.roles || "user"], // Include roles array for frontend
+      },
+    });
+  } catch (error) {
+    console.error("Sign-in error:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+//Forgot & Reset Password
+export const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  // Generate token
+  const token = crypto.randomBytes(32).toString("hex");
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  // Set token & expiry (1 hour)
+  user.resetPasswordToken = hashedToken;
+  user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
+  await user.save();
+
+  // const resetURL = `${process.env.REACT_APP_URL}/reset-password/${token}`; 
+  const resetURL = `http://localhost:5173/reset-password/${token}`; 
+
+  res.status(200).json({
+    success: true,
+    message: "Password reset link sent",
+    resetURL, // remove this in production and just email it
+  });
+};
+
+export const resetPassword = async (req, res) => {
+  const { token } = req.params;
+  const { newPassword } = req.body;
+
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpires: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    return res.status(404).json({ message: "Token is invalid or expired" });
+  }
+
+  user.password = await newPassword;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpires = undefined;
+
+  await user.save();
+
+  res.status(200).json({ success: true, message: "Password reset successfully" });
+};
+
+// Fetch Users
+export const fetchUsers = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(
+      token,
+      "gauabhayaranyam5000"
+    );
+
+    const user = await User.findById(decoded.userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Proceed to return user data (or list of users, depending on your intent)
+    res.status(200).json({
+      success: true,
+      message: "User fetched successfully",
+      user: {
+        id: user._id,
+        name: user.firstName,
+        email: user.email,
+        roles: user.roles,
+      },
+    });
+  } catch (error) {
+    console.error("Get user error:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+export const getUserProfile = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const user = await User.findById(userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ success: true, message: "User profile fetched successfully", user });
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+export const updateUserProfile = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { firstName, lastName, phone, email } = req.body;
+
+    const user = await User.findById(userId).select("-password -roles");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (phone) user.phone = phone;
+    if (email) user.email = email;
+
+    // Single profile image
+    if (
+      req.files &&
+      req.files.profileImage &&
+      req.files.profileImage.length > 0
+    ) {
+      user.profileImage = req.files.profileImage[0].path;
+    } else if (req.body.profileImage) {
+      user.profileImage = req.body.profileImage; // for URL strings
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      user,
+    });
+  } catch (err) {
+    console.error("Error updating profile:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        message: "Both currentPassword and newPassword are required",
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+    });
+  } catch (error) {
+    console.error("Error changing password:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+export const assignVolunteerRole = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    //Not combine
+    if (user.roles.includes("dealer") || user.roles.includes("admin")) {
+      return res.status(400).json({
+        message:
+          "Cannot combine 'volunteer' role to dealer or admin users only user",
+      });
+    }
+
+    // Add "volunteer" to roles if not present
+    if (!user.roles.includes("volunteer")) {
+      user.roles.push("volunteer");
+      await user.save();
+    }
+
+    res.status(200).json({ success: true, message: "Volunteer role assigned", user });
+  } catch (err) {
+    console.error("Assign role error:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const getTotalVolunteers = async (req, res) => {
+  try {
+    // Count all users/volunteers who have the role 'volunteer'
+    const total = await User.countDocuments({ roles: "volunteer" });
+
+    res.status(200).json({ success: true, message: "Total volunteers fetched successfully", totalVolunteers: total });
+  } catch (err) {
+    console.error("Error fetching total volunteers:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const getTotalCities = async (req, res) => {
+  try {
+    const counts = await Donation.aggregate([
+      {
+        $group: {
+          _id: "$address.location", // or "$city" or whatever your donation location field is
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { count: -1 },
+      },
+    ]);
+
+    // Format as { cityName: count, ... }
+    const result = counts.reduce((acc, cur) => {
+      acc[cur._id || "Unknown"] = cur.count;
+      return acc;
+    }, {});
+
+    res.status(200).json({ success: true, message: "Donation counts fetched successfully", counts: result });
+  } catch (err) {
+    console.error("Error fetching donation counts by location:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const getTotalScrapedWeight = async (req, res) => {
+  try {
+    const result = await Donation.aggregate([
+      {
+        $match: {
+          status: { $in: ["picked-up", "donated"] },
+          weight: { $exists: true, $ne: null },
+        },
+      },
+      {
+        $project: {
+          weightDouble: { $toDouble: "$weight" },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalWeight: { $sum: "$weightDouble" },
+        },
+      },
+    ]);
+
+    const totalWeight = result[0]?.totalWeight || 0;
+
+    return res.status(200).json({
+      success: true,
+      message: "Total collected donation weight calculated successfully",
+      totalWeight, 
+    });
+  } catch (err) {
+    console.error("Error calculating total collected donation weight:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while calculating total weight",
+      error: err.message,
+    });
+  }
+};
+
+export const getImpacts = async (req, res) => {
+  try {
+    const impacts = await Impact.find();
+    res.status(200).json({ success: true, message: "Impacts fetched successfully", impacts });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch impacts", error: err.message });
+  }
+};
+
+//Donation
+export const createDonation = async (req, res) => {
+  try {
+    const {
+      scrapType,
+      phone,
+      description,
+      addressLine1,
+      addressLine2,
+      pincode,
+      city,
+      country,
+      pickupDate,
+      pickupTime,
+      images: bodyImages, // this might be JSON string or array
+    } = req.body;
+
+    const donor = req.user.userId;
+
+    let uploadedImages = [];
+
+    if (req.files?.images) {
+      const filesArray = Array.isArray(req.files.images)
+        ? req.files.images
+        : [req.files.images];
+
+      uploadedImages = filesArray.map((file) => ({
+        url: file.path,
+      }));
+    }
+
+    // 🔹 Images from body (URLs)
+    let urlImages = [];
+    if (req.body.images) {
+      try {
+        const parsed =
+          typeof req.body.images === "string"
+            ? JSON.parse(req.body.images)
+            : req.body.images;
+
+        if (Array.isArray(parsed)) {
+          urlImages = parsed;
+        }
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid images format" });
+      }
+    }
+
+    // 🔹 Combine both
+    const images = [...uploadedImages, ...urlImages];
+
+    if (
+      !scrapType ||
+      !phone ||
+      !description ||
+      !pickupDate ||
+      !pickupTime ||
+      images.length === 0
+    ) {
+      return res.status(400).json({
+        message: "Missing required fields or no images provided",
+      });
+    }
+
+    const donation = await Donation.create({
+      donor,
+      scrapType,
+      phone,
+      description,
+      addressLine1,
+      addressLine2,
+      pincode,
+      city,
+      country,
+      pickupDate,
+      pickupTime,
+      images,
+      activityLog: [
+        {
+          action: "created",
+          by: donor,
+          note: "Donation created by donor.",
+        },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Donation created successfully",
+      donation,
+    });
+  } catch (error) {
+    console.error("Create Donation Error:", error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+export const getDonations = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userRoles = req.user.roles;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Unauthorized: User not authenticated",
+      });
+    }
+
+    // 🔄 Route for 'user' to fetch their own donations
+    if (userRoles.includes("user")) {
+      const donations = await Donation.find({ donor: userId }).sort({
+        createdAt: -1,
+      });
+
+      const donationCount = donations.length;
+
+      return res.status(200).json({ success: true, message: "User donations fetched successfully", count: donationCount, donations });
+    }
+
+    // ✅ Route for 'volunteer' to fetch assigned donations
+    if (userRoles.includes("volunteer")) {
+      const donations = await Donation.find({ assignedVolunteer: userId }).sort(
+        {
+          pickupDate: 1,
+        }
+      );
+
+      const today = new Date().toISOString().split("T")[0];
+
+      const stats = {
+        assigned: donations.length,
+        upcoming: donations.filter((d) => new Date(d.pickupDate) > new Date())
+          .length,
+        completed: donations.filter((d) => d.status === "completed").length,
+        todayTasks: donations
+          .filter((d) => d.pickupDate.split("T")[0] === today)
+          .map((d) => `${d.address} at ${d.pickupTime}`),
+      };
+
+      return res.status(200).json({ success: true, message: "Volunteer donations fetched successfully", stats });
+    }
+
+    // ❌ Deny all others
+    return res.status(403).json({
+      success: false,
+      message: "Access denied: Only users or volunteers can access this route",
+
+    });
+  } catch (err) {
+    console.error("Get donations error:", err);
+    res.status(500).json({ success: false, message: "Failed to get donations", error: err.message });
+  }
+};
+
+export const updateDonation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const user = req.user;
+    // Ensure only users can update donations
+    if (!user || !user.roles.includes("user")) {
+      return res.status(403).json({
+        message: "Access denied. Only users can update donations.",
+      });
+    }
+    const donation = await Donation.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!donation) {
+      return res.status(404).json({ error: "Donation not found" });
+    }
+
+    res.status(200).json({ success: true, message: "Donation updated successfully", donation });
+  } catch (error) {
+    console.error("Edit Donation Error:", error);
+    res.status(500).json({ success: false, message: "Server error while updating donation", error: error.message });
+  }
+};
+
+export const getDonationsCount = async (req, res) => {
+  try {
+    const userId = req.user.userId; // or req.query.userId if coming from query string
+
+    if (!userId) {
+      return res.status(400).json({ message: "Missing userId" });
+    }
+
+    const count = await Donation.countDocuments({ donor: userId });
+    res.status(200).json({ success: true, message: "Donation count fetched successfully", count });
+  } catch (err) {
+    console.error("Error fetching donation count:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const getDonationsCountByStatus = async (req, res) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+
+    const counts = await Donation.aggregate([
+      {
+        $match: {
+          donor: userId, // adjust field name as per your model
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const result = counts.reduce((acc, cur) => {
+      acc[cur._id] = cur.count;
+      return acc;
+    }, {});
+
+    res.status(200).json({ success: true, message: "Donation counts fetched successfully", counts: result });
+  } catch (err) {
+    console.error("Error fetching donation counts by status:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+//Task Data
+export const getMyAssignedTasks = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userRoles = req.user.roles; // note plural 'roles' as array
+
+    const allowedRoles = ["user", "volunteer"];
+
+    // Check if userRoles contains at least one allowed role
+    if (!userRoles.some((role) => allowedRoles.includes(role))) {
+      return res
+        .status(403)
+        .json({ message: "Access denied: Unauthorized role" });
+    }
+
+    const tasks = await VolunteerTask.find({ volunteer: userId });
+
+    if (!tasks || tasks.length === 0) {
+      return res.status(404).json({
+        message: "No tasks assigned to you",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Assigned tasks fetched successfully",
+      tasks,
+    });
+  } catch (err) {
+    console.error("Error fetching assigned tasks:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching tasks",
+      error: err.message,
+    });
+  }
+};
+
+export const getTaskCount = async (req, res) => {
+  try {
+    console.log("req.user:", req.user); // Add this to debug
+
+    const { userId, roles } = req.user || {};
+
+    if (
+      !roles ||
+      (Array.isArray(roles)
+        ? !roles.includes("volunteer")
+        : roles !== "volunteer")
+    ) {
+      return res.status(403).json({
+        message: "Access denied: only volunteers allowed.",
+      });
+    }
+
+    const count = await VolunteerTask.countDocuments({
+      volunteer: userId,
+    });
+
+    res.status(200).json({ success: true, message: "Volunteer task count fetched successfully", count });
+  } catch (err) {
+    console.error("Error fetching volunteer task count:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const getTaskCountByStatus = async (req, res) => {
+  try {
+    const volunteerId = req.user.userId;
+    const { roles } = req.user || {};
+
+    const counts = await VolunteerTask.aggregate([
+      {
+        $match: {
+          volunteer: new mongoose.Types.ObjectId(volunteerId),
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    if (
+      !roles ||
+      (Array.isArray(roles)
+        ? !roles.includes("volunteer")
+        : roles !== "volunteer")
+    ) {
+      return res.status(403).json({
+        message: "Access denied: only volunteers allowed.",
+      });
+    }
+
+    const formatted = counts.reduce((acc, item) => {
+      acc[item._id] = item.count;
+      return acc;
+    }, {});
+
+    const allStatuses = ["pending", "in-progress", "completed", "cancelled"];
+    const result = {};
+    allStatuses.forEach((status) => {
+      result[status] = formatted[status] || 0;
+    });
+
+    res.status(200).json({ success: true, message: "Volunteer task counts fetched successfully", counts: result });
+  } catch (err) {
+    console.error("Error fetching volunteer task counts by status:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const updateTaskStatus = async (req, res) => {
+  try {
+    const { id: taskId } = req.params;
+    const { action } = req.body;
+    const userId = req.user.userId;
+
+    const task = await VolunteerTask.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    // Only assigned volunteer can update
+    const roles = req.user.roles || []; // ["user", "volunteer"]
+
+    // Check if user has role "volunteer"
+    const isVolunteer = Array.isArray(roles)
+      ? roles.includes("volunteer")
+      : roles === "volunteer";
+
+    // Allow if admin OR the volunteer assigned to this task
+    const isAuthorized = isVolunteer && task.volunteer.toString() === userId;
+
+    if (!isAuthorized) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    const allowedActions = ["accept", "reject", "complete"];
+    if (!allowedActions.includes(action)) {
+      return res.status(400).json({ message: `Invalid action: ${action}` });
+    }
+
+    // Block any update if already cancelled
+    if (task.status === "cancelled") {
+      return res
+        .status(400)
+        .json({ message: "Cannot update a cancelled task" });
+    }
+
+    if (action === "accept") {
+      if (task.status !== "pending") {
+        return res.status(400).json({
+          message: "Only pending tasks can be accepted",
+        });
+      }
+      task.status = "in-progress";
+    } else if (action === "reject") {
+      if (task.status !== "pending") {
+        return res.status(400).json({
+          message: "Only pending tasks can be rejected",
+        });
+      }
+      task.status = "cancelled";
+    } else if (action === "complete") {
+      if (task.status !== "in-progress") {
+        return res.status(400).json({
+          message: "Only in-progress tasks can be marked completed",
+        });
+      }
+      task.status = "completed";
+    } else {
+      return res.status(400).json({ message: "Invalid action" });
+    }
+
+    await task.save();
+    res.status(200).json({ success: true, message: "Task status updated", task });
+  } catch (err) {
+    console.error("Task status update error:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+//Delete Account
+export const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const deletedUser = await User.findByIdAndDelete(userId);
+
+    if (!deletedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User account deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting account:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+//Dealers Data
+export const getDonationsByDealer = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const userRoles = req.user?.roles || [];
+
+    // Must be authenticated
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    // Must have 'dealer' role
+    if (!userRoles.includes("dealer")) {
+      return res.status(403).json({ message: "Access denied: Dealers only" });
+    }
+
+    // Find donations assigned to the logged-in dealer
+    const donations = await Donation.find({ dealer: userId })
+      .populate("donor", "firstName email")
+      .populate("dealer", "firstName email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Dealer donations fetched successfully",
+      count: donations.length,
+      donations,
+    });
+  } catch (err) {
+    console.error("Error fetching dealer donations:", err);
+    return res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const getPickupDonations = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const userRoles = req.user?.roles || [];
+    // Must be authenticated
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: No user found" });
+    }
+
+    // Must have 'dealer' role
+    if (!userRoles.includes("dealer")) {
+      return res.status(403).json({ message: "Access denied: Dealers only" });
+    }
+
+    const pickupStatuses = ["assigned", "in-progress", "picked-up"];
+
+    // Count all pickup donations assigned to the current dealer
+    const totalPickupCount = await Donation.countDocuments({
+      status: { $in: pickupStatuses },
+      dealer: userId,
+    });
+
+    // Fetch the pickup donations with donor details
+    const pickupDonations = await Donation.find({
+      status: { $in: pickupStatuses },
+      dealer: userId,
+    }).populate("donor", "firstName lastName email");
+
+    return res.status(200).json({
+      success: true,
+      message: "Pickup donations fetched successfully",
+      totalPickups: totalPickupCount,
+      donations: pickupDonations,
+    });
+  } catch (error) {
+    console.error("Error fetching pickup donations:", error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+export const updateDonationStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, note } = req.body;
+
+    const user = req.user;
+    if (!user || !user.roles.includes("dealer")) {
+      return res.status(403).json({
+        message: "Access denied: Only dealers can update donations",
+      });
+    }
+
+    const dealerId = user.userId;
+
+    const donation = await Donation.findById(id).populate("dealer");
+    if (!donation) {
+      return res.status(404).json({
+        message: "Donation not found",
+      });
+    }
+
+    const allowedStatuses = ["in-progress", "picked-up", "donated"];
+    if (!status || !allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        message:
+          "Invalid status. Dealers can only update to: in-progress, picked-up, or donated.",
+      });
+    }
+
+    // Check if the donation is assigned to the logged-in dealer
+    if (donation.dealer?._id.toString() !== dealerId.toString()) {
+      return res.status(403).json({
+        message: "You are not authorized to update this donation",
+      });
+    }
+
+    // Update donation status and add activity log entry
+    donation.status = status;
+    donation.activityLog.push({
+      action: status,
+      by: donation.dealer._id,
+      role: "dealer",
+      note: note || `Dealer updated status to ${status}`,
+    });
+
+    await donation.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Donation status updated by dealer",
+      donation,
+    });
+  } catch (err) {
+    console.error("Dealer status update error:", err);
+    return res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const addPriceandweight = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { price, weight, notes } = req.body;
+
+    const userId = req.user.userId;
+    const roles = req.user.roles || [];
+
+    // Must be authenticated and have dealer role
+    const isDealer = Array.isArray(roles)
+      ? roles.includes("dealer")
+      : roles === "dealer";
+
+    if (!isDealer) {
+      return res.status(403).json({
+        message: "Access denied: Only dealers can update donation price/weight",
+      });
+    }
+
+    // Find donation and ensure it exists
+    const donation = await Donation.findById(id).populate("dealer");
+    if (!donation) {
+      return res.status(404).json({ message: "Donation not found" });
+    }
+
+    // Confirm donation is assigned to this dealer
+    if (donation.dealer?._id.toString() !== userId.toString()) {
+      return res.status(403).json({
+        message: "You are not authorized to update this donation",
+      });
+    }
+
+    // Require price and weight in request
+    if (price === undefined || weight === undefined) {
+      return res.status(400).json({
+        message: "Price and weight are required",
+      });
+    }
+
+    // Update donation fields
+    donation.price = price;
+    donation.weight = weight;
+    if (notes !== undefined) donation.notes = notes;
+
+    await donation.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Donation updated successfully",
+      donation,
+    });
+  } catch (err) {
+    console.error("Update error:", err);
+    return res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+//Sliders Image
+export const getSliders = async (req, res) => {
+  try {
+    console.log("Fetching sliders from database...");
+    const sliders = await Slider.find();
+    console.log("Sliders fetched:", sliders.length);
+    res.status(200).json({
+      success: true,
+      message: "Sliders fetched successfully",
+      sliders,
+    });
+  } catch (error) {
+    console.error("Error in getSliders:", {
+      success: false,
+      message: error.message,
+      stack: error.stack,
+    });
+    res
+      .status(500)
+      .json({ success: false, message: "Error fetching sliders", error: error.message });
+  }
+};
+
+export const logoGet = async (req, res) => {
+  try {
+    console.log("Connecting to database...");
+    const logo = await Logo.findOne().sort({ createdAt: -1 });
+    if (!logo) {
+      console.log("No logo found in the database");
+      return res.status(404).json({ message: "No logo found" });
+    }
+    res.status(200).json({
+      success: true,
+      message: "Logo fetched successfully",
+      logo,
+    });
+  } catch (err) {
+    console.error("Error fetching logo:", err);
+    res.status(500).json({ success: false, message: "Error fetching logo", error: err.message });
+  }
+};
+
+//Gaudaan
+export const getAssignedGaudaan = async (req, res) => {
+  try {
+    const volunteerId = req.user.userId;
+
+    if (!volunteerId) {
+      return res.status(400).json({ message: "Volunteer ID is required" });
+    }
+
+    const user = req.user;
+    if (!user || !user.roles.includes("volunteer")) {
+      return res.status(403).json({
+        message: "Access denied: Only volunteers can update donations",
+      });
+    }
+
+    const assignedGaudaan = await Gaudaan.find({
+      assignedVolunteer: volunteerId,
+    }).populate("assignedVolunteer", "firstName lastName email"); // Optional
+
+    res.status(200).json({
+      success: true,
+      message: "Assigned Gaudaan fetched successfully",
+      assignedGaudaan,
+    });
+  } catch (error) {
+    console.error("Error fetching assigned Gaudaan:", error);
+    res.status(200).json({ message: "Server error", error: error.message });
+  }
+};
+
+export const updategaudaanStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const allowed = ["assigned", "picked_up", "shelter", "dropped"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const updated = await Gaudaan.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+    if (!updated) {
+      return res.status(404).json({ message: "Donation not found" });
+    }
+
+    res.status(200).json({ success: true, message: "Update Details", updated });
+  } catch (err) {
+    console.error("Status update error:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+export const controller = {
+  volunteerSignup,
+  signUpAuth,
+  sendOTPAuth,
+  signInAuth,
+  forgotPassword,
+  resetPassword,
+  fetchUsers,
+  getUserProfile,
+  updateUserProfile,
+  changePassword,
+  assignVolunteerRole,
+  getTotalVolunteers,
+  getTotalCities,
+  getTotalScrapedWeight,
+  getImpacts,
+  createDonation,
+  getDonations,
+  updateDonation,
+  getDonationsCount,
+  getDonationsCountByStatus,
+  getMyAssignedTasks,
+  getTaskCount,
+  getTaskCountByStatus,
+  updateTaskStatus,
+  deleteAccount,
+  getDonationsByDealer,
+  getPickupDonations,
+  updateDonationStatus,
+  addPriceandweight,
+  getSliders,
+  logoGet,
+  getAssignedGaudaan,
+  updategaudaanStatus,
+};
+
+export default controller
