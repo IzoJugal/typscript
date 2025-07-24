@@ -1,7 +1,7 @@
-import Gaudaan from "../Model/GaudaanModel.js"
-import User from "../Model/AuthModel.js"
+const Gaudaan = require("../Model/GaudaanModel");
+const User = require("../Model/AuthModel");
 
-export const gaudaanForm = async (req, res) => {
+const gaudaanForm = async (req, res) => {
   try {
     const { name, email, phone, address, pickupDate, pickupTime, location } =
       req.body;
@@ -85,7 +85,7 @@ export const gaudaanForm = async (req, res) => {
   }
 };
 
-export const getGaudaanSubmissions = async (req, res) => {
+const getGaudaanSubmissions = async (req, res) => {
   try {
     const data = await Gaudaan.find()
       .populate("assignedVolunteer", "firstName lastName email")
@@ -98,7 +98,7 @@ export const getGaudaanSubmissions = async (req, res) => {
   }
 };
 
-export const getUsersByRole = async (req, res) => {
+const getUsersByRole = async (req, res) => {
   try {
     const role = req.query.role;
     if (!role) {
@@ -115,7 +115,7 @@ export const getUsersByRole = async (req, res) => {
   }
 };
 
-export const assignVolunteer = async (req, res) => {
+const assignVolunteer = async (req, res) => {
   try {
     const { gaudaanId } = req.params;
     const { volunteerId } = req.body;
@@ -153,7 +153,7 @@ export const assignVolunteer = async (req, res) => {
 };
 
 // User
-export const getAssignedGaudaan = async (req, res) => {
+const getAssignedGaudaan = async (req, res) => {
   try {
     const { volunteerId } = req.params;
 
@@ -172,7 +172,7 @@ export const getAssignedGaudaan = async (req, res) => {
   }
 };
 
-export const updategaudaanStatus = async (req, res) => {
+const updategaudaanStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -198,7 +198,7 @@ export const updategaudaanStatus = async (req, res) => {
   }
 };
 
-export const controller = {
+module.exports = {
   gaudaanForm,
   getGaudaanSubmissions,
   getUsersByRole,
@@ -206,5 +206,3 @@ export const controller = {
   getAssignedGaudaan,
   updategaudaanStatus,
 };
-
-export default controller;

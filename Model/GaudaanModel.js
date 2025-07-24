@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+const mongoose = require("mongoose");
 
 const gaudaanSchema = new mongoose.Schema({
   name: String,
@@ -25,6 +25,4 @@ const gaudaanSchema = new mongoose.Schema({
   timestamps: true, 
 });
 
-const Gaudaan = mongoose.model("Gaudaan", gaudaanSchema);
-
-export default Gaudaan
+module.exports = mongoose.model("Gaudaan", gaudaanSchema);

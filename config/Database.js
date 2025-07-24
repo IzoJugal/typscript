@@ -1,10 +1,8 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 const connectDB = async () => {
-  // const uri = process.env.MONGO_URI;
-  const uri = "mongodb+srv://nileshahir286:55F0jUoOC2Cj7c5D@gauabhayaranyam.bwkbrlp.mongodb.net/gauabhayaranyam"
-
-console.log(`MOGO_URI:`,uri);
+  const uri = process.env.MONGO_URI;
+console.log(`MOGO_URI__________:`,process.env.MONGO_URI);
 
   if (!uri) {
     console.error("❌ MONGO_URI is not defined in .env");
@@ -23,4 +21,4 @@ console.log(`MOGO_URI:`,uri);
   }
 };
 
-export default connectDB;
+module.exports = connectDB;

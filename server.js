@@ -1,19 +1,14 @@
-import dotenv from "dotenv"
+const dotenv = require("dotenv");
 const env = dotenv.config({ path: "./config.env" });
-import express from "express"
-import cors from "cors"
-import path from "path"
-import connectDB from "./config/Database.js"
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+const connectDB = require("./config/Database");
 
-import authRoute from "./route/AuthRoute.js"
-import adminRoute from "./route/AdminRoute.js"
-import gaudaanRoute from "./route/GaudaanRoute.js"
-import contactRoute from "./route/ContactRouter.js"
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+const authRoute = require("./route/AuthRoute");
+const adminRoute = require("./route/AdminRoute");
+const gaudaanRoute = require("./route/GaudaanRoute");
+const contactRoute = require("./route/ContactRouter");
 
 const app = express();
 
@@ -32,7 +27,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // 🌐 Connect to MongoDB and start server
-const PORT = 6000;
+const PORT = process.env.PORT || 8000;
+console.log(`ENV PORT:`,process.env.PORT);
 
 connectDB()
   .then(() => {

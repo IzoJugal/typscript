@@ -1,8 +1,8 @@
-import express from "express"
+const express = require("express");
 const router = express.Router();
-import controller from "../controller/GaudaanController.js"
-import multer from "multer"
-import path from "path"
+const controller = require("../controller/GaudaanController");
+const multer = require("multer");
+const path = require("path");
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -37,4 +37,4 @@ router.route("/assigned/:volunteerId").get( controller.getAssignedGaudaan);
 router.route("/updateStatus/:id").patch( controller.updategaudaanStatus);
 
 
-export default router;
+module.exports = router;

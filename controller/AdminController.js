@@ -1,17 +1,17 @@
-import Admin from "../Model/AuthModel.js"
-import User from "../Model/AuthModel.js"
-import Donation from "../Model/DonationModel.js"
-import Task from "../Model/TaskModel.js"
-import Slider from "../Model/SliderModel.js"
-import Impact from "../Model/Impact.js"
-import Logo from "../Model/Logo.js"
-import Gaudaan from "../Model/GaudaanModel.js"
-import fs from "fs"
-import jwt from "jsonwebtoken"
-import bcrypt from "bcryptjs"
-import path from "path"
+const Admin = require("../Model/AuthModel");
+const User = require("../Model/AuthModel");
+const Donation = require("../Model/DonationModel");
+const Task = require("../Model/TaskModel");
+const Slider = require("../Model/SliderModel");
+const Impact = require("../Model/Impact");
+const Logo = require("../Model/Logo");
+const Gaudaan = require("../Model/GaudaanModel");
+const fs = require("fs");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const path = require("path");
 
-export const getAdmin = async (req, res) => {
+const getAdmin = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) {
@@ -23,9 +23,10 @@ export const getAdmin = async (req, res) => {
     // Verify token
     const decoded = jwt.verify(
       token,
-      "gauabhayaranyam5000"
+      process.env.JWT_SECRET || "your_jwt_secret"
     );
-    
+console.log(`GADJWT:`,process.env.JWT_SECRET);
+
     const admin = await Admin.findById(decoded.userId).select("-password"); // Exclude password
 
     if (!admin) {
@@ -51,7 +52,7 @@ export const getAdmin = async (req, res) => {
 };
 
 // Admin Data
-export const getAdminProfile = async (req, res) => {
+const getAdminProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
 
@@ -78,7 +79,7 @@ export const getAdminProfile = async (req, res) => {
   }
 };
 
-export const updateAdminProfile = async (req, res) => {
+const updateAdminProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { firstName, lastName, phone, email } = req.body;
@@ -115,7 +116,7 @@ export const updateAdminProfile = async (req, res) => {
   }
 };
 
-export const changePassword = async (req, res) => {
+const changePassword = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { currentPassword, newPassword } = req.body;
@@ -156,7 +157,7 @@ export const changePassword = async (req, res) => {
 };
 
 //Daashboard Data
-export const PickedUpAndDonated = async (req, res) => {
+const PickedUpAndDonated = async (req, res) => {
   try {
     // Fetch all donations
     const allDonations = await Donation.find({})
@@ -170,10 +171,14 @@ export const PickedUpAndDonated = async (req, res) => {
       return acc;
     }, {});
 
+    // Total donation count
+    const totalCount = allDonations.length;
+
     return res.status(200).json({
       success: true,
       message: "Donation statuses fetched successfully",
       donationsByStatus: grouped,
+      totalDonations: totalCount, // 👈 added this
     });
   } catch (err) {
     console.error("Error fetching donation statuses:", err);
@@ -185,7 +190,8 @@ export const PickedUpAndDonated = async (req, res) => {
   }
 };
 
-export const getTotalScrapedWeight = async (req, res) => {
+
+const getTotalScrapedWeight = async (req, res) => {
   try {
     const result = await Donation.aggregate([
       {
@@ -224,7 +230,7 @@ export const getTotalScrapedWeight = async (req, res) => {
   }
 };
 
-export const getTotalDonationValue = async (req, res) => {
+const getTotalDonationValue = async (req, res) => {
   try {
     const result = await Donation.aggregate([
       {
@@ -263,7 +269,7 @@ export const getTotalDonationValue = async (req, res) => {
   }
 };
 
-export const getUsersCounts = async (req, res) => {
+const getUsersCounts = async (req, res) => {
   try {
     const activeUsers = await User.countDocuments({
       isActive: true,
@@ -285,7 +291,7 @@ export const getUsersCounts = async (req, res) => {
   }
 };
 
-export const getDealersCounts = async (req, res) => {
+const getDealersCounts = async (req, res) => {
   try {
     const user = req.user;
 
@@ -318,7 +324,7 @@ export const getDealersCounts = async (req, res) => {
   }
 };
 
-export const getVolunteerCounts = async (req, res) => {
+const getVolunteerCounts = async (req, res) => {
   try {
     const activeUsers = await User.countDocuments({
       isActive: true,
@@ -340,7 +346,7 @@ export const getVolunteerCounts = async (req, res) => {
   }
 };
 
-export const getPendingDonations = async (req, res) => {
+const getPendingDonations = async (req, res) => {
   try {
     // Find all donations with status 'pending'
     const donations = await Donation.find({ status: "pending" })
@@ -364,7 +370,7 @@ export const getPendingDonations = async (req, res) => {
 };
 
 //History data
-export const  getHistory = async (req, res) => {
+const  getHistory = async (req, res) => {
   try {
     // Find all donations with status 'donated' or 'cancelled'
     const donations = await Donation.find({
@@ -390,7 +396,7 @@ export const  getHistory = async (req, res) => {
 };
 
 //Dealer Data
-export const getDealers = async (req, res) => {
+const getDealers = async (req, res) => {
   try {
     const user = req.user;
 
@@ -430,7 +436,7 @@ export const getDealers = async (req, res) => {
   }
 };
 
-export const assignDealer = async (req, res) => {
+const assignDealer = async (req, res) => {
   try {
     const { dealerId, assignedDealer, notes, status } = req.body;
     const { id } = req.params;
@@ -486,7 +492,7 @@ export const assignDealer = async (req, res) => {
   }
 };
 
-export const rejectDonation = async (req, res) => {
+const rejectDonation = async (req, res) => {
   try {
     const { id } = req.params;
     const { notes } = req.body;
@@ -516,7 +522,7 @@ export const rejectDonation = async (req, res) => {
 };
 
 //Task Data
-export const getVolunteers = async (req, res) => {
+const getVolunteers = async (req, res) => {
   try {
     const user = req.user;
 
@@ -558,7 +564,7 @@ export const getVolunteers = async (req, res) => {
   }
 };
 
-export const createVolunteerTask = async (req, res) => {
+const createVolunteerTask = async (req, res) => {
   try {
     const {
       taskTitle,
@@ -646,7 +652,7 @@ export const createVolunteerTask = async (req, res) => {
   }
 };
 
-export const updateVolunteerTask = async (req, res) => {
+const updateVolunteerTask = async (req, res) => {
   try {
     const { taskId } = req.params;
     const {
@@ -730,7 +736,7 @@ export const updateVolunteerTask = async (req, res) => {
   }
 };
 
-export const getAllVolunteerTasks = async (req, res) => {
+const getAllVolunteerTasks = async (req, res) => {
   try {
     const tasks = await Task.find()
       .populate("volunteer", "firstName lastName email")
@@ -753,7 +759,7 @@ export const getAllVolunteerTasks = async (req, res) => {
 };
 
 //Users Data
-export const getUsers = async (req, res) => {
+const getUsers = async (req, res) => {
   try {
     const users = await User.find({
       $and: [
@@ -778,7 +784,7 @@ export const getUsers = async (req, res) => {
   }
 };
 
-export const getUserById = async (req, res) => {
+const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -808,7 +814,7 @@ export const getUserById = async (req, res) => {
   }
 };
 
-export const updateUserById = async (req, res) => {
+const updateUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, phone, email, profileImage } = req.body;
@@ -846,7 +852,7 @@ export const updateUserById = async (req, res) => {
   }
 };
 
-export const deleteUserById = async (req, res) => {
+const deleteUserById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -874,21 +880,17 @@ export const deleteUserById = async (req, res) => {
   }
 };
 
-export const toggleUserStatus = async (req, res) => {
+const toggleUserStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(400)
-        .json({  message: "Invalid user ID" });
+      return res.status(400).json({ message: "Invalid user ID" });
     }
 
     if (typeof isActive !== "boolean") {
-      return res
-        .status(400)
-        .json({  message: "isActive must be true or false" });
+      return res.status(400).json({ message: "isActive must be true or false" });
     }
 
     const user = await User.findByIdAndUpdate(
@@ -898,9 +900,7 @@ export const toggleUserStatus = async (req, res) => {
     ).select("-password");
 
     if (!user) {
-      return res
-        .status(404)
-        .json({  message: "User not found" });
+      return res.status(404).json({ message: "User not found" });
     }
 
     res.status(200).json({
@@ -915,7 +915,7 @@ export const toggleUserStatus = async (req, res) => {
 };
 
 //Dealer Data
-export const fetchDealers = async (req, res) => {
+const fetchDealers = async (req, res) => {
   try {
   const dealer = await User.find({ roles: { $in: ["dealer"] } }).select("-password");
 
@@ -941,7 +941,7 @@ export const fetchDealers = async (req, res) => {
   }
 };
 
-export const getDealerById = async (req, res) => {
+const getDealerById = async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -969,7 +969,7 @@ export const getDealerById = async (req, res) => {
   }
 };
 
-export const updateDealerById = async (req, res) => {
+const updateDealerById = async (req, res) => {
   try {
     // Assuming req.user or req.admin contains the logged-in user's info, including roles
     const user = req.user || req.admin;
@@ -1017,7 +1017,7 @@ export const updateDealerById = async (req, res) => {
   }
 };
 
-export const deleteDealerById = async (req, res) => {
+const deleteDealerById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1045,7 +1045,7 @@ export const deleteDealerById = async (req, res) => {
   }
 };
 
-export const toggleDealerStatus = async (req, res) => {
+const toggleDealerStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body;
@@ -1086,7 +1086,7 @@ export const toggleDealerStatus = async (req, res) => {
 };
 
 //Delete Account
-export const deleteAccount = async (req, res) => {
+const deleteAccount = async (req, res) => {
   try {
     const adminId = req.params.id || req.user._id;
 
@@ -1117,7 +1117,7 @@ export const deleteAccount = async (req, res) => {
 };
 
 // Slider images
-export const sliderImage = async (req, res) => {
+const sliderImage = async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "No files uploaded" });
@@ -1142,7 +1142,7 @@ export const sliderImage = async (req, res) => {
   }
 };
 
-export const getSliders = async (req, res) => {
+const getSliders = async (req, res) => {
   try {
     const sliders = await Slider.find();
     res.json({ success: true, message: "Sliders fetched successfully", data: sliders });
@@ -1157,7 +1157,7 @@ export const getSliders = async (req, res) => {
   }
 };
 
-export const uploadLogo = async (req, res) => {
+const uploadLogo = async (req, res) => {
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ message: "No file uploaded" });
@@ -1188,7 +1188,7 @@ export const uploadLogo = async (req, res) => {
   }
 };
 
-export const logoGet = async (req, res) => {
+const logoGet = async (req, res) => {
   try {
     const logo = await Logo.findOne().sort({ createdAt: -1 });
     res.status(200).json({ success: true, message: "Logo fetched successfully", data: logo || null });
@@ -1198,7 +1198,7 @@ export const logoGet = async (req, res) => {
 };
 
 // Impacts Data
-export const saveImpacts = async (req, res) => {
+const saveImpacts = async (req, res) => {
   const updates = req.body;
 
   try {
@@ -1230,7 +1230,7 @@ export const saveImpacts = async (req, res) => {
 };
 
 // Fetch all impact stats
-export const getImpacts = async (req, res) => {
+const getImpacts = async (req, res) => {
   try {
     const impacts = await Impact.find();
     res.status(200).json({ success: true, message: "Impacts fetched successfully", data: impacts });
@@ -1240,7 +1240,7 @@ export const getImpacts = async (req, res) => {
 };
 
 // Gaudaan Data
-export const getGaudaanSubmissions = async (req, res) => {
+const getGaudaanSubmissions = async (req, res) => {
   try {
     const roles = req.user.roles || [];
 
@@ -1266,7 +1266,8 @@ export const getGaudaanSubmissions = async (req, res) => {
   }
 };
 
-export const getVolunteerUsers = async (req, res) => {
+
+const getVolunteerUsers = async (req, res) => {
   try {
     const users = await User.find({ roles: { $in: ["volunteer"] } }).select(
       "firstName lastName email"
@@ -1284,7 +1285,8 @@ export const getVolunteerUsers = async (req, res) => {
   }
 };
 
-export const assignVolunteer = async (req, res) => {
+
+const assignVolunteer = async (req, res) => {
   try {
     const { gaudaanId } = req.params;
     const { volunteerId } = req.body;
@@ -1310,7 +1312,7 @@ export const assignVolunteer = async (req, res) => {
   }
 };
 
-const controller = {
+module.exports = {
   getAdmin,
   getAdminProfile,
   updateAdminProfile,
@@ -1351,5 +1353,3 @@ const controller = {
   getVolunteerUsers,
   assignVolunteer,
 };
-
-export default controller

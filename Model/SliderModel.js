@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+const mongoose = require("mongoose");
 
 const sliderSchema = new mongoose.Schema({
   images: [
@@ -15,4 +15,4 @@ const sliderSchema = new mongoose.Schema({
   },
 });
 
-export default mongoose.model("Slider", sliderSchema);
+module.exports = mongoose.model("Image", sliderSchema);

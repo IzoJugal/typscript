@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+const mongoose = require("mongoose");
 
 const impactSchema = new mongoose.Schema({      
   count: String,       
@@ -9,5 +9,4 @@ const impactSchema = new mongoose.Schema({
   },
 });
 
-export default mongoose.model("Impact", impactSchema);
-
+module.exports = mongoose.model("Impact", impactSchema);

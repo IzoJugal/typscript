@@ -1,4 +1,5 @@
-import mongoose from "mongoose"
+// models/Logo.js
+const mongoose = require("mongoose");
 
 const logoSchema = new mongoose.Schema({
   url: String,
@@ -9,4 +10,4 @@ const logoSchema = new mongoose.Schema({
   },
 });
 
-export default mongoose.model("Logo", logoSchema);
+module.exports = mongoose.model("Logo", logoSchema);

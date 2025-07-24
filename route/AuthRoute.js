@@ -1,8 +1,8 @@
-import express from "express"
+const express = require("express");
 const router = express.Router();
-import controller from "../controller/AuthController.js"
-import authMiddleware from "../middleware/authMiddleware.js"
-import multer from "multer"
+const controller = require("../controller/AuthController");
+const authMiddleware = require("../middleware/authMiddleware");
+const multer = require("multer");
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -103,4 +103,4 @@ router.route("/assigned").get(authMiddleware, controller.getAssignedGaudaan);
 router.route("/updateStatus/:id").patch(authMiddleware, controller.updategaudaanStatus);
 
 
-export default  router;
+module.exports = router;

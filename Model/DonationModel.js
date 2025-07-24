@@ -1,4 +1,5 @@
-import mongoose from "mongoose";
+// models/donation.model.js
+const mongoose = require("mongoose");
 
 const donationSchema = new mongoose.Schema(
   {
@@ -128,4 +129,4 @@ const donationSchema = new mongoose.Schema(
 
 const Donation = mongoose.model("Donation", donationSchema);
 
-export default Donation;
+module.exports = Donation;

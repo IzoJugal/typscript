@@ -1,9 +1,9 @@
-import express from "express"
+const express = require("express");
 const router = express.Router();
-import controller from "../controller/AdminController.js"
-import adminMiddleware from "../middleware/adminMiddleware.js"
-import multer from "multer"
-import path from "path"
+const controller = require("../controller/AdminController");
+const adminMiddleware = require("../middleware/adminMiddleware");
+const multer = require("multer");
+const path = require("path");
 
 // Storage config
 const storage = multer.diskStorage({
@@ -116,4 +116,4 @@ router.route("/uvolunteer").get(adminMiddleware, controller.getVolunteerUsers);
 
 router.route("/assignVolunteer/:gaudaanId").patch(adminMiddleware, controller.assignVolunteer);
 
-export default router;
+module.exports = router;

@@ -1,18 +1,18 @@
-import mongoose from "mongoose"
-import User from "../Model/AuthModel.js"
-import Donation from "../Model/DonationModel.js"
-import VolunteerTask from "../Model/TaskModel.js"
-import Slider from "../Model/SliderModel.js"
-import Logo from "../Model/Logo.js"
-import Gaudaan from "../Model/GaudaanModel.js"
-import Impact from "../Model/Impact.js"
-import crypto from "crypto"
-import bcrypt from "bcryptjs"
-import jwt from "jsonwebtoken"
-import axios from "axios"
+const mongoose = require("mongoose");
+const User = require("../Model/AuthModel");
+const Donation = require("../Model/DonationModel");
+const VolunteerTask = require("../Model/TaskModel");
+const Slider = require("../Model/SliderModel");
+const Logo = require("../Model/Logo");
+const Gaudaan = require("../Model/GaudaanModel");
+const Impact = require("../Model/Impact");
+const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const axios = require("axios");
 
 // Volunteer data
-export const volunteerSignup = async (req, res) => {
+const volunteerSignup = async (req, res) => {
   let { firstName, lastName, phone, email, password, otp, method } = req.body;
 
   // Input validation
@@ -90,9 +90,10 @@ export const volunteerSignup = async (req, res) => {
       roles: newUser.roles,
     };
 
-    const token = jwt.sign(payload, "gauabhayaranyam5000", {
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+console.log(`VSJWT:`,process.env.JWT_SECRET);
 
 
     // ✅ Success response
@@ -117,7 +118,7 @@ export const volunteerSignup = async (req, res) => {
 };
 
 // User Data
-export const signUpAuth = async (req, res) => {
+const signUpAuth = async (req, res) => {
   let { firstName, lastName, phone, email, password, otp, method, roles } =
     req.body;
 
@@ -192,9 +193,11 @@ export const signUpAuth = async (req, res) => {
       roles: newUser.roles,
     };
 
-    const token = jwt.sign(payload, "gauabhayaranyam5000", {
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+console.log(`SUJWT:`,process.env.JWT_SECRET);
+
 
     // ✅ Success response
     res.status(200).json({
@@ -219,9 +222,9 @@ export const signUpAuth = async (req, res) => {
   }
 };
 
-export const otpStore = new Map();
+const otpStore = new Map();
 
-export const sendSMSOTP = async (phone, otp) => {
+const sendSMSOTP = async (phone, otp) => {
   const msg = `Your Gauabhayaranya OTP is: ${otp}. It expires in 5 minutes.`;
 
   const response = await axios.post(
@@ -243,7 +246,7 @@ export const sendSMSOTP = async (phone, otp) => {
   return response.data;
 };
 
-export const sendOTPAuth = async (req, res) => {
+const sendOTPAuth = async (req, res) => {
   const { phone, method } = req.body;
 
   if (!phone) {
@@ -276,7 +279,7 @@ export const sendOTPAuth = async (req, res) => {
   }
 };
 
-export const signInAuth = async (req, res) => {
+const signInAuth = async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -295,9 +298,10 @@ export const signInAuth = async (req, res) => {
     // Generate JWT token
     const token = jwt.sign(
       { userId: user._id, email: user.email, roles: user.roles },
-      "gauabhayaranyam5000",
+      process.env.JWT_SECRET || "your_jwt_secret", // Use environment variable for secret
       { expiresIn: "1d" } // Token expires in 1 Day
     );
+console.log(`SINJWT:`,process.env.JWT_SECRET);
 
     // Return response with token, user, and role
     res.status(200).json({
@@ -319,7 +323,7 @@ export const signInAuth = async (req, res) => {
 };
 
 //Forgot & Reset Password
-export const forgotPassword = async (req, res) => {
+const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
@@ -340,8 +344,9 @@ export const forgotPassword = async (req, res) => {
   user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
   await user.save();
 
-  // const resetURL = `${process.env.REACT_APP_URL}/reset-password/${token}`; 
-  const resetURL = `http://localhost:5173/reset-password/${token}`; 
+  const resetURL = `${process.env.REACT_APP_URL}/reset-password/${token}`; 
+console.log(`FPJWT:`,process.env.REACT_APP_URL);
+
 
   res.status(200).json({
     success: true,
@@ -350,7 +355,7 @@ export const forgotPassword = async (req, res) => {
   });
 };
 
-export const resetPassword = async (req, res) => {
+const resetPassword = async (req, res) => {
   const { token } = req.params;
   const { newPassword } = req.body;
 
@@ -375,7 +380,7 @@ export const resetPassword = async (req, res) => {
 };
 
 // Fetch Users
-export const fetchUsers = async (req, res) => {
+const fetchUsers = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) {
@@ -385,8 +390,9 @@ export const fetchUsers = async (req, res) => {
     // Verify token
     const decoded = jwt.verify(
       token,
-      "gauabhayaranyam5000"
+      process.env.JWT_SECRET || "your_jwt_secret"
     );
+console.log(`FUJWT:`,process.env.JWT_SECRET);
 
     const user = await User.findById(decoded.userId).select("-password");
     if (!user) {
@@ -410,7 +416,7 @@ export const fetchUsers = async (req, res) => {
   }
 };
 
-export const getUserProfile = async (req, res) => {
+const getUserProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
 
@@ -426,7 +432,7 @@ export const getUserProfile = async (req, res) => {
   }
 };
 
-export const updateUserProfile = async (req, res) => {
+const updateUserProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { firstName, lastName, phone, email } = req.body;
@@ -466,7 +472,7 @@ export const updateUserProfile = async (req, res) => {
   }
 };
 
-export const changePassword = async (req, res) => {
+const changePassword = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { currentPassword, newPassword } = req.body;
@@ -502,7 +508,7 @@ export const changePassword = async (req, res) => {
   }
 };
 
-export const assignVolunteerRole = async (req, res) => {
+const assignVolunteerRole = async (req, res) => {
   try {
     const userId = req.user.userId;
 
@@ -536,7 +542,7 @@ export const assignVolunteerRole = async (req, res) => {
   }
 };
 
-export const getTotalVolunteers = async (req, res) => {
+const getTotalVolunteers = async (req, res) => {
   try {
     // Count all users/volunteers who have the role 'volunteer'
     const total = await User.countDocuments({ roles: "volunteer" });
@@ -548,7 +554,7 @@ export const getTotalVolunteers = async (req, res) => {
   }
 };
 
-export const getTotalCities = async (req, res) => {
+const getTotalCities = async (req, res) => {
   try {
     const counts = await Donation.aggregate([
       {
@@ -575,7 +581,7 @@ export const getTotalCities = async (req, res) => {
   }
 };
 
-export const getTotalScrapedWeight = async (req, res) => {
+const getTotalScrapedWeight = async (req, res) => {
   try {
     const result = await Donation.aggregate([
       {
@@ -614,7 +620,8 @@ export const getTotalScrapedWeight = async (req, res) => {
   }
 };
 
-export const getImpacts = async (req, res) => {
+
+const getImpacts = async (req, res) => {
   try {
     const impacts = await Impact.find();
     res.status(200).json({ success: true, message: "Impacts fetched successfully", impacts });
@@ -624,7 +631,7 @@ export const getImpacts = async (req, res) => {
 };
 
 //Donation
-export const createDonation = async (req, res) => {
+const createDonation = async (req, res) => {
   try {
     const {
       scrapType,
@@ -720,7 +727,7 @@ export const createDonation = async (req, res) => {
   }
 };
 
-export const getDonations = async (req, res) => {
+const getDonations = async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRoles = req.user.roles;
@@ -777,7 +784,7 @@ export const getDonations = async (req, res) => {
   }
 };
 
-export const updateDonation = async (req, res) => {
+const updateDonation = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -805,7 +812,7 @@ export const updateDonation = async (req, res) => {
   }
 };
 
-export const getDonationsCount = async (req, res) => {
+const getDonationsCount = async (req, res) => {
   try {
     const userId = req.user.userId; // or req.query.userId if coming from query string
 
@@ -821,7 +828,7 @@ export const getDonationsCount = async (req, res) => {
   }
 };
 
-export const getDonationsCountByStatus = async (req, res) => {
+const getDonationsCountByStatus = async (req, res) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.user.userId);
 
@@ -852,7 +859,7 @@ export const getDonationsCountByStatus = async (req, res) => {
 };
 
 //Task Data
-export const getMyAssignedTasks = async (req, res) => {
+const getMyAssignedTasks = async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRoles = req.user.roles; // note plural 'roles' as array
@@ -889,7 +896,7 @@ export const getMyAssignedTasks = async (req, res) => {
   }
 };
 
-export const getTaskCount = async (req, res) => {
+const getTaskCount = async (req, res) => {
   try {
     console.log("req.user:", req.user); // Add this to debug
 
@@ -917,7 +924,7 @@ export const getTaskCount = async (req, res) => {
   }
 };
 
-export const getTaskCountByStatus = async (req, res) => {
+const getTaskCountByStatus = async (req, res) => {
   try {
     const volunteerId = req.user.userId;
     const { roles } = req.user || {};
@@ -965,7 +972,7 @@ export const getTaskCountByStatus = async (req, res) => {
   }
 };
 
-export const updateTaskStatus = async (req, res) => {
+const updateTaskStatus = async (req, res) => {
   try {
     const { id: taskId } = req.params;
     const { action } = req.body;
@@ -1037,7 +1044,7 @@ export const updateTaskStatus = async (req, res) => {
 };
 
 //Delete Account
-export const deleteAccount = async (req, res) => {
+const deleteAccount = async (req, res) => {
   try {
     const userId = req.user.userId;
 
@@ -1058,7 +1065,7 @@ export const deleteAccount = async (req, res) => {
 };
 
 //Dealers Data
-export const getDonationsByDealer = async (req, res) => {
+const getDonationsByDealer = async (req, res) => {
   try {
     const userId = req.user?.userId;
     const userRoles = req.user?.roles || [];
@@ -1091,7 +1098,7 @@ export const getDonationsByDealer = async (req, res) => {
   }
 };
 
-export const getPickupDonations = async (req, res) => {
+const getPickupDonations = async (req, res) => {
   try {
     const userId = req.user?.userId;
     const userRoles = req.user?.roles || [];
@@ -1131,7 +1138,7 @@ export const getPickupDonations = async (req, res) => {
   }
 };
 
-export const updateDonationStatus = async (req, res) => {
+const updateDonationStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, note } = req.body;
@@ -1189,7 +1196,7 @@ export const updateDonationStatus = async (req, res) => {
   }
 };
 
-export const addPriceandweight = async (req, res) => {
+const addPriceandweight = async (req, res) => {
   try {
     const { id } = req.params;
     const { price, weight, notes } = req.body;
@@ -1247,7 +1254,7 @@ export const addPriceandweight = async (req, res) => {
 };
 
 //Sliders Image
-export const getSliders = async (req, res) => {
+const getSliders = async (req, res) => {
   try {
     console.log("Fetching sliders from database...");
     const sliders = await Slider.find();
@@ -1269,7 +1276,7 @@ export const getSliders = async (req, res) => {
   }
 };
 
-export const logoGet = async (req, res) => {
+const logoGet = async (req, res) => {
   try {
     console.log("Connecting to database...");
     const logo = await Logo.findOne().sort({ createdAt: -1 });
@@ -1277,6 +1284,7 @@ export const logoGet = async (req, res) => {
       console.log("No logo found in the database");
       return res.status(404).json({ message: "No logo found" });
     }
+    console.log("Logo fetched:", logo);
     res.status(200).json({
       success: true,
       message: "Logo fetched successfully",
@@ -1289,7 +1297,7 @@ export const logoGet = async (req, res) => {
 };
 
 //Gaudaan
-export const getAssignedGaudaan = async (req, res) => {
+const getAssignedGaudaan = async (req, res) => {
   try {
     const volunteerId = req.user.userId;
 
@@ -1319,7 +1327,7 @@ export const getAssignedGaudaan = async (req, res) => {
   }
 };
 
-export const updategaudaanStatus = async (req, res) => {
+const updategaudaanStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -1345,7 +1353,7 @@ export const updategaudaanStatus = async (req, res) => {
   }
 };
 
-export const controller = {
+module.exports = {
   volunteerSignup,
   signUpAuth,
   sendOTPAuth,
@@ -1380,5 +1388,3 @@ export const controller = {
   getAssignedGaudaan,
   updategaudaanStatus,
 };
-
-export default controller

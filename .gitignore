@@ -1,6 +1,6 @@
 /dist/
-/node_modules/
+/node_modules
 /.env
-/config.env
-/.vscode/
-/uploads/
+/cobined.log
+/images
+/congig.env

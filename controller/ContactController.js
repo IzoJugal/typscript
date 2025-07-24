@@ -1,7 +1,7 @@
-import Contact from "../Model/ContactModel.js"
+const Contact = require("../Model/ContactModel");
 
 // Controller function
-export const submitContactForm = async (req, res) => {
+exports.submitContactForm = async (req, res) => {
   try {
     const { name, email, phone, message } = req.body;
 
@@ -24,5 +24,3 @@ export const submitContactForm = async (req, res) => {
       .json({ success: false, message: "Server error", error: error.message });
   }
 };
-
-export default submitContactForm;

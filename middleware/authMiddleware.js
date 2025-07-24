@@ -1,6 +1,6 @@
-import jwt from "jsonwebtoken"
+const jwt = require("jsonwebtoken");
 
-export const authMiddleware = (req, res, next) => {
+const authMiddleware = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   if (!authHeader) {
     return res.status(403).json({ message: "No token provided." });
@@ -19,4 +19,4 @@ export const authMiddleware = (req, res, next) => {
   }
 };
 
-export default authMiddleware;
+module.exports = authMiddleware;

@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+const mongoose = require("mongoose");
 
 const volunteerTaskSchema = new mongoose.Schema(
   {
@@ -52,4 +52,4 @@ const volunteerTaskSchema = new mongoose.Schema(
 
 const VolunteerTask = mongoose.model("VolunteerTask", volunteerTaskSchema);
 
-export default VolunteerTask;
+module.exports = VolunteerTask;
