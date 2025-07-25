@@ -3,4 +3,5 @@
 /.env
 /cobined.log
 /images
-/congig.env
+/config.env
+/uploads
