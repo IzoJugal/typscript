@@ -25,8 +25,7 @@ const getAdmin = async (req, res) => {
       token,
       process.env.JWT_SECRET || "your_jwt_secret"
     );
-console.log(`GADJWT:`,process.env.JWT_SECRET);
-
+    
     const admin = await Admin.findById(decoded.userId).select("-password"); // Exclude password
 
     if (!admin) {

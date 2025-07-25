@@ -93,7 +93,6 @@ const volunteerSignup = async (req, res) => {
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
-console.log(`VSJWT:`,process.env.JWT_SECRET);
 
 
     // ✅ Success response
@@ -196,7 +195,6 @@ const signUpAuth = async (req, res) => {
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
-console.log(`SUJWT:`,process.env.JWT_SECRET);
 
 
     // ✅ Success response
@@ -301,7 +299,6 @@ const signInAuth = async (req, res) => {
       process.env.JWT_SECRET || "your_jwt_secret", // Use environment variable for secret
       { expiresIn: "1d" } // Token expires in 1 Day
     );
-console.log(`SINJWT:`,process.env.JWT_SECRET);
 
     // Return response with token, user, and role
     res.status(200).json({
@@ -345,7 +342,6 @@ const forgotPassword = async (req, res) => {
   await user.save();
 
   const resetURL = `${process.env.REACT_APP_URL}/reset-password/${token}`; 
-console.log(`FPJWT:`,process.env.REACT_APP_URL);
 
 
   res.status(200).json({
@@ -392,7 +388,6 @@ const fetchUsers = async (req, res) => {
       token,
       process.env.JWT_SECRET || "your_jwt_secret"
     );
-console.log(`FUJWT:`,process.env.JWT_SECRET);
 
     const user = await User.findById(decoded.userId).select("-password");
     if (!user) {

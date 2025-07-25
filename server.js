@@ -28,7 +28,6 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // 🌐 Connect to MongoDB and start server
 const PORT = 5000;
-console.log(`ENV PORT:`,process.env.PORT);
 
 connectDB()
   .then(() => {
