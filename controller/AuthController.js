@@ -45,7 +45,7 @@ const volunteerSignup = async (req, res) => {
     email = email.toLowerCase();
 
     // ❌ OTP validation skipped for now (commented out)
-// 🧠 OTP Validation
+    // 🧠 OTP Validation
     // const key = `${email}-${phone}`;
     // const storedOTP = otpStore.get(key);
 
@@ -94,7 +94,6 @@ const volunteerSignup = async (req, res) => {
       expiresIn: "7d",
     });
 
-
     // ✅ Success response
     res.status(200).json({
       success: true,
@@ -112,7 +111,13 @@ const volunteerSignup = async (req, res) => {
     });
   } catch (err) {
     console.error("Signup Error:", err);
-    res.status(500).json({success: false, message: "Server error during signup",error: err.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Server error during signup",
+        error: err.message,
+      });
   }
 };
 
@@ -196,7 +201,6 @@ const signUpAuth = async (req, res) => {
       expiresIn: "7d",
     });
 
-
     // ✅ Success response
     res.status(200).json({
       success: true,
@@ -216,7 +220,11 @@ const signUpAuth = async (req, res) => {
     console.error("Signup Error Stack:", err); // shows full trace
     res
       .status(500)
-      .json({ success: false, message: "Server error during signup", error: err.message });
+      .json({
+        success: false,
+        message: "Server error during signup",
+        error: err.message,
+      });
   }
 };
 
@@ -270,10 +278,18 @@ const sendOTPAuth = async (req, res) => {
       return res.status(400).json({ message: "Invalid OTP method" });
     }
 
-    return res.status(200).json({ success: true, message: `OTP sent via ${method}` });
+    return res
+      .status(200)
+      .json({ success: true, message: `OTP sent via ${method}` });
   } catch (err) {
     console.error("Send OTP Error:", err);
-    return res.status(500).json({ success: false, message: "Server error while sending OTP", error: err.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Server error while sending OTP",
+        error: err.message,
+      });
   }
 };
 
@@ -315,7 +331,9 @@ const signInAuth = async (req, res) => {
     });
   } catch (error) {
     console.error("Sign-in error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -341,8 +359,7 @@ const forgotPassword = async (req, res) => {
   user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
   await user.save();
 
-  const resetURL = `${process.env.REACT_APP_URL}/reset-password/${token}`; 
-
+  const resetURL = `${process.env.REACT_APP_URL}/reset-password/${token}`;
 
   res.status(200).json({
     success: true,
@@ -372,7 +389,9 @@ const resetPassword = async (req, res) => {
 
   await user.save();
 
-  res.status(200).json({ success: true, message: "Password reset successfully" });
+  res
+    .status(200)
+    .json({ success: true, message: "Password reset successfully" });
 };
 
 // Fetch Users
@@ -407,7 +426,9 @@ const fetchUsers = async (req, res) => {
     });
   } catch (error) {
     console.error("Get user error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -420,10 +441,18 @@ const getUserProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.status(200).json({ success: true, message: "User profile fetched successfully", user });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "User profile fetched successfully",
+        user,
+      });
   } catch (error) {
     console.error("Error fetching user profile:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -451,7 +480,7 @@ const updateUserProfile = async (req, res) => {
     ) {
       user.profileImage = req.files.profileImage[0].path;
     } else if (req.body.profileImage) {
-      user.profileImage = req.body.profileImage; // for URL strings
+      user.profileImage = req.body.profileImage;
     }
 
     await user.save();
@@ -463,7 +492,9 @@ const updateUserProfile = async (req, res) => {
     });
   } catch (err) {
     console.error("Error updating profile:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -499,7 +530,9 @@ const changePassword = async (req, res) => {
     });
   } catch (error) {
     console.error("Error changing password:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -530,10 +563,14 @@ const assignVolunteerRole = async (req, res) => {
       await user.save();
     }
 
-    res.status(200).json({ success: true, message: "Volunteer role assigned", user });
+    res
+      .status(200)
+      .json({ success: true, message: "Volunteer role assigned", user });
   } catch (err) {
     console.error("Assign role error:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -542,10 +579,18 @@ const getTotalVolunteers = async (req, res) => {
     // Count all users/volunteers who have the role 'volunteer'
     const total = await User.countDocuments({ roles: "volunteer" });
 
-    res.status(200).json({ success: true, message: "Total volunteers fetched successfully", totalVolunteers: total });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Total volunteers fetched successfully",
+        totalVolunteers: total,
+      });
   } catch (err) {
     console.error("Error fetching total volunteers:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -569,10 +614,18 @@ const getTotalCities = async (req, res) => {
       return acc;
     }, {});
 
-    res.status(200).json({ success: true, message: "Donation counts fetched successfully", counts: result });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Donation counts fetched successfully",
+        counts: result,
+      });
   } catch (err) {
     console.error("Error fetching donation counts by location:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -603,7 +656,7 @@ const getTotalScrapedWeight = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Total collected donation weight calculated successfully",
-      totalWeight, 
+      totalWeight,
     });
   } catch (err) {
     console.error("Error calculating total collected donation weight:", err);
@@ -615,13 +668,24 @@ const getTotalScrapedWeight = async (req, res) => {
   }
 };
 
-
 const getImpacts = async (req, res) => {
   try {
     const impacts = await Impact.find();
-    res.status(200).json({ success: true, message: "Impacts fetched successfully", impacts });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Impacts fetched successfully",
+        impacts,
+      });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Failed to fetch impacts", error: err.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to fetch impacts",
+        error: err.message,
+      });
   }
 };
 
@@ -718,7 +782,9 @@ const createDonation = async (req, res) => {
     });
   } catch (error) {
     console.error("Create Donation Error:", error);
-    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -741,7 +807,14 @@ const getDonations = async (req, res) => {
 
       const donationCount = donations.length;
 
-      return res.status(200).json({ success: true, message: "User donations fetched successfully", count: donationCount, donations });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message: "User donations fetched successfully",
+          count: donationCount,
+          donations,
+        });
     }
 
     // ✅ Route for 'volunteer' to fetch assigned donations
@@ -764,18 +837,29 @@ const getDonations = async (req, res) => {
           .map((d) => `${d.address} at ${d.pickupTime}`),
       };
 
-      return res.status(200).json({ success: true, message: "Volunteer donations fetched successfully", stats });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message: "Volunteer donations fetched successfully",
+          stats,
+        });
     }
 
     // ❌ Deny all others
     return res.status(403).json({
       success: false,
       message: "Access denied: Only users or volunteers can access this route",
-
     });
   } catch (err) {
     console.error("Get donations error:", err);
-    res.status(500).json({ success: false, message: "Failed to get donations", error: err.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to get donations",
+        error: err.message,
+      });
   }
 };
 
@@ -800,10 +884,22 @@ const updateDonation = async (req, res) => {
       return res.status(404).json({ error: "Donation not found" });
     }
 
-    res.status(200).json({ success: true, message: "Donation updated successfully", donation });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Donation updated successfully",
+        donation,
+      });
   } catch (error) {
     console.error("Edit Donation Error:", error);
-    res.status(500).json({ success: false, message: "Server error while updating donation", error: error.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Server error while updating donation",
+        error: error.message,
+      });
   }
 };
 
@@ -816,10 +912,18 @@ const getDonationsCount = async (req, res) => {
     }
 
     const count = await Donation.countDocuments({ donor: userId });
-    res.status(200).json({ success: true, message: "Donation count fetched successfully", count });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Donation count fetched successfully",
+        count,
+      });
   } catch (err) {
     console.error("Error fetching donation count:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -846,10 +950,18 @@ const getDonationsCountByStatus = async (req, res) => {
       return acc;
     }, {});
 
-    res.status(200).json({ success: true, message: "Donation counts fetched successfully", counts: result });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Donation counts fetched successfully",
+        counts: result,
+      });
   } catch (err) {
     console.error("Error fetching donation counts by status:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -912,10 +1024,18 @@ const getTaskCount = async (req, res) => {
       volunteer: userId,
     });
 
-    res.status(200).json({ success: true, message: "Volunteer task count fetched successfully", count });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Volunteer task count fetched successfully",
+        count,
+      });
   } catch (err) {
     console.error("Error fetching volunteer task count:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -960,10 +1080,18 @@ const getTaskCountByStatus = async (req, res) => {
       result[status] = formatted[status] || 0;
     });
 
-    res.status(200).json({ success: true, message: "Volunteer task counts fetched successfully", counts: result });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Volunteer task counts fetched successfully",
+        counts: result,
+      });
   } catch (err) {
     console.error("Error fetching volunteer task counts by status:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -1031,10 +1159,14 @@ const updateTaskStatus = async (req, res) => {
     }
 
     await task.save();
-    res.status(200).json({ success: true, message: "Task status updated", task });
+    res
+      .status(200)
+      .json({ success: true, message: "Task status updated", task });
   } catch (err) {
     console.error("Task status update error:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -1055,7 +1187,9 @@ const deleteAccount = async (req, res) => {
     });
   } catch (error) {
     console.error("Error deleting account:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -1089,7 +1223,9 @@ const getDonationsByDealer = async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching dealer donations:", err);
-    return res.status(500).json({ success: false, message: "Server error", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -1129,7 +1265,9 @@ const getPickupDonations = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching pickup donations:", error);
-    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -1187,7 +1325,9 @@ const updateDonationStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("Dealer status update error:", err);
-    return res.status(500).json({ success: false, message: "Server error", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -1244,7 +1384,9 @@ const addPriceandweight = async (req, res) => {
     });
   } catch (err) {
     console.error("Update error:", err);
-    return res.status(500).json({ success: false, message: "Server error", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -1267,7 +1409,11 @@ const getSliders = async (req, res) => {
     });
     res
       .status(500)
-      .json({ success: false, message: "Error fetching sliders", error: error.message });
+      .json({
+        success: false,
+        message: "Error fetching sliders",
+        error: error.message,
+      });
   }
 };
 
@@ -1287,7 +1433,13 @@ const logoGet = async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching logo:", err);
-    res.status(500).json({ success: false, message: "Error fetching logo", error: err.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching logo",
+        error: err.message,
+      });
   }
 };
 
@@ -1344,7 +1496,9 @@ const updategaudaanStatus = async (req, res) => {
     res.status(200).json({ success: true, message: "Update Details", updated });
   } catch (err) {
     console.error("Status update error:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 

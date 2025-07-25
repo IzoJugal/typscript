@@ -26,6 +26,8 @@ app.use(express.urlencoded({ extended: true }));
 // 🗂️ Serve static uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+app.use("/uploads", express.static("uploads"));
+
 // 🌐 Connect to MongoDB and start server
 const PORT = 5000;
 
@@ -42,7 +44,9 @@ connectDB()
     // 🧪 Root Health Check
     app.get("/", (req, res) => {
       console.log("🚀 API Gauabhayaranyam Run Success.");
-      res.status(200).json({ success: true, message: "API Gauabhayaranyam Run." });
+      res
+        .status(200)
+        .json({ success: true, message: "API Gauabhayaranyam Run." });
     });
 
     // 🛡️ Start Server
