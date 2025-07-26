@@ -6,6 +6,7 @@ const Slider = require("../Model/SliderModel");
 const Impact = require("../Model/Impact");
 const Logo = require("../Model/Logo");
 const Gaudaan = require("../Model/GaudaanModel");
+const Shelter = require("../Model/ShelterModel");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -15,9 +16,7 @@ const getAdmin = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) {
-      return res
-        .status(400)
-        .json({  message: "No token provided" });
+      return res.status(400).json({ message: "No token provided" });
     }
 
     // Verify token
@@ -25,13 +24,11 @@ const getAdmin = async (req, res) => {
       token,
       process.env.JWT_SECRET || "your_jwt_secret"
     );
-    
+
     const admin = await Admin.findById(decoded.userId).select("-password"); // Exclude password
 
     if (!admin) {
-      return res
-        .status(404)
-        .json({  message: "Admin not found" });
+      return res.status(404).json({ message: "Admin not found" });
     }
 
     res.status(200).json({
@@ -46,7 +43,9 @@ const getAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error("Get admin error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -58,9 +57,7 @@ const getAdminProfile = async (req, res) => {
     const admin = await Admin.findById(userId).select("-password");
 
     if (!admin) {
-      return res
-        .status(404)
-        .json({  message: "Admin not found" });
+      return res.status(404).json({ message: "Admin not found" });
     }
 
     res.status(200).json({
@@ -85,9 +82,7 @@ const updateAdminProfile = async (req, res) => {
 
     const admin = await Admin.findById(userId).select("-password -roles");
     if (!admin) {
-      return res
-        .status(404)
-        .json({  message: "Admin not found" });
+      return res.status(404).json({ message: "Admin not found" });
     }
 
     // Update other profile fields
@@ -123,15 +118,12 @@ const changePassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         message: "Both currentPassword and newPassword are required",
-        
       });
     }
 
     const admin = await Admin.findById(userId);
     if (!admin) {
-      return res
-        .status(404)
-        .json({  message: "Admin not found" });
+      return res.status(404).json({ message: "Admin not found" });
     }
 
     const isMatch = await bcrypt.compare(currentPassword, admin.password);
@@ -151,7 +143,9 @@ const changePassword = async (req, res) => {
     });
   } catch (error) {
     console.error("Error changing password:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -189,7 +183,6 @@ const PickedUpAndDonated = async (req, res) => {
   }
 };
 
-
 const getTotalScrapedWeight = async (req, res) => {
   try {
     const result = await Donation.aggregate([
@@ -217,7 +210,7 @@ const getTotalScrapedWeight = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Total collected donation weight calculated successfully",
-      totalWeight, 
+      totalWeight,
     });
   } catch (err) {
     console.error("Error calculating total collected donation weight:", err);
@@ -369,7 +362,7 @@ const getPendingDonations = async (req, res) => {
 };
 
 //History data
-const  getHistory = async (req, res) => {
+const getHistory = async (req, res) => {
   try {
     // Find all donations with status 'donated' or 'cancelled'
     const donations = await Donation.find({
@@ -487,7 +480,9 @@ const assignDealer = async (req, res) => {
     });
   } catch (err) {
     console.error("Assign dealer error:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -511,7 +506,11 @@ const rejectDonation = async (req, res) => {
     console.log({ message: "Donation rejected and cancelled", donation });
     return res
       .status(200)
-      .json({ success: true, message: "Donation rejected and cancelled", donation });
+      .json({
+        success: true,
+        message: "Donation rejected and cancelled",
+        donation,
+      });
   } catch (err) {
     console.error("Error rejecting donation:", err);
     return res
@@ -786,21 +785,16 @@ const getUsers = async (req, res) => {
 const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(200)
-        .json({  message: "Invalid user ID" });
+      return res.status(200).json({ message: "Invalid user ID" });
     }
 
     // Find user by ID and update fields if provided
     const user = await User.findById(id);
     if (!user) {
-      return res
-        .status(404)
-        .json({  message: "User not found" });
+      return res.status(404).json({ message: "User not found" });
     }
-
 
     res.status(200).json({
       success: true,
@@ -809,7 +803,9 @@ const getUserById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating user:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -819,17 +815,13 @@ const updateUserById = async (req, res) => {
     const { firstName, lastName, phone, email, profileImage } = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(400)
-        .json({  message: "Invalid user ID" });
+      return res.status(400).json({ message: "Invalid user ID" });
     }
 
     // Find user by ID and update fields if provided
     const user = await User.findById(id);
     if (!user) {
-      return res
-        .status(404)
-        .json({  message: "User not found" });
+      return res.status(404).json({ message: "User not found" });
     }
 
     if (firstName) user.firstName = firstName;
@@ -847,7 +839,9 @@ const updateUserById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating user:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -856,17 +850,13 @@ const deleteUserById = async (req, res) => {
     const { id } = req.params;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(400)
-        .json({  message: "Invalid user ID" });
+      return res.status(400).json({ message: "Invalid user ID" });
     }
 
     const deletedUser = await User.findByIdAndDelete(id);
 
     if (!deletedUser) {
-      return res
-        .status(404)
-        .json({  message: "User not found" });
+      return res.status(404).json({ message: "User not found" });
     }
 
     res.status(200).json({
@@ -875,7 +865,9 @@ const deleteUserById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error deleting user:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -889,7 +881,9 @@ const toggleUserStatus = async (req, res) => {
     }
 
     if (typeof isActive !== "boolean") {
-      return res.status(400).json({ message: "isActive must be true or false" });
+      return res
+        .status(400)
+        .json({ message: "isActive must be true or false" });
     }
 
     const user = await User.findByIdAndUpdate(
@@ -909,19 +903,21 @@ const toggleUserStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating user active status:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
 //Dealer Data
 const fetchDealers = async (req, res) => {
   try {
-  const dealer = await User.find({ roles: { $in: ["dealer"] } }).select("-password");
+    const dealer = await User.find({ roles: { $in: ["dealer"] } }).select(
+      "-password"
+    );
 
     if (!dealer) {
-      return res
-        .status(404)
-        .json({  message: "Dealer not found" });
+      return res.status(404).json({ message: "Dealer not found" });
     }
 
     res.status(200).json({
@@ -943,18 +939,14 @@ const fetchDealers = async (req, res) => {
 const getDealerById = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(400)
-        .json({  message: "Invalid dealer ID" });
+      return res.status(400).json({ message: "Invalid dealer ID" });
     }
 
     const dealer = await User.findById(id).select("-password");
     if (!dealer) {
-      return res
-        .status(404)
-        .json({  message: "Dealer not found" });
+      return res.status(404).json({ message: "Dealer not found" });
     }
 
     res.status(200).json({
@@ -964,7 +956,9 @@ const getDealerById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching dealer:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -984,17 +978,13 @@ const updateDealerById = async (req, res) => {
     const { firstName, lastName, phone, email, profileImage } = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(400)
-        .json({  message: "Invalid dealer ID" });
+      return res.status(400).json({ message: "Invalid dealer ID" });
     }
 
     // Find dealer by ID and update fields if provided
     const dealer = await User.findById(id);
     if (!dealer) {
-      return res
-        .status(404)
-        .json({  message: "Dealer not found" });
+      return res.status(404).json({ message: "Dealer not found" });
     }
 
     if (firstName) dealer.firstName = firstName;
@@ -1012,7 +1002,9 @@ const updateDealerById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating dealer:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -1021,17 +1013,13 @@ const deleteDealerById = async (req, res) => {
     const { id } = req.params;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(400)
-        .json({  message: "Invalid dealer ID" });
+      return res.status(400).json({ message: "Invalid dealer ID" });
     }
 
     const deletedDealer = await User.findByIdAndDelete(id);
 
     if (!deletedDealer) {
-      return res
-        .status(404)
-        .json({  message: "Dealer not found" });
+      return res.status(404).json({ message: "Dealer not found" });
     }
 
     res.status(200).json({
@@ -1040,7 +1028,9 @@ const deleteDealerById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error deleting dealer:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -1050,15 +1040,13 @@ const toggleDealerStatus = async (req, res) => {
     const { isActive } = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res
-        .status(400)
-        .json({  message: "Invalid dealer ID" });
+      return res.status(400).json({ message: "Invalid dealer ID" });
     }
 
     if (typeof isActive !== "boolean") {
       return res
         .status(400)
-        .json({  message: "isActive must be true or false" });
+        .json({ message: "isActive must be true or false" });
     }
 
     const dealer = await User.findByIdAndUpdate(
@@ -1068,9 +1056,7 @@ const toggleDealerStatus = async (req, res) => {
     ).select("-password");
 
     if (!dealer) {
-      return res
-        .status(404)
-        .json({  message: "Dealer not found" });
+      return res.status(404).json({ message: "Dealer not found" });
     }
 
     res.status(200).json({
@@ -1080,7 +1066,9 @@ const toggleDealerStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating dealer active status:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -1091,17 +1079,13 @@ const deleteAccount = async (req, res) => {
 
     // Ensure the user is an admin
     if (!req.user.roles.includes("admin")) {
-      return res
-        .status(403)
-        .json({  message: "Access denied. Admins only." });
+      return res.status(403).json({ message: "Access denied. Admins only." });
     }
 
     const deletedAdmin = await Admin.findByIdAndDelete(adminId);
 
     if (!deletedAdmin) {
-      return res
-        .status(404)
-        .json({  message: "Admin not found" });
+      return res.status(404).json({ message: "Admin not found" });
     }
 
     res
@@ -1111,7 +1095,11 @@ const deleteAccount = async (req, res) => {
     console.error("Error deleting account:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server error while deleting account", error: error.message });
+      .json({
+        success: false,
+        message: "Server error while deleting account",
+        error: error.message,
+      });
   }
 };
 
@@ -1129,7 +1117,13 @@ const sliderImage = async (req, res) => {
 
     const slider = new Slider({ images });
     await slider.save();
-    res.status(201).json({ success: true, message: "Slider created successfully", data: slider });
+    res
+      .status(201)
+      .json({
+        success: true,
+        message: "Slider created successfully",
+        data: slider,
+      });
   } catch (error) {
     console.error("Error in sliderImage:", {
       message: error.message,
@@ -1137,14 +1131,22 @@ const sliderImage = async (req, res) => {
     });
     res
       .status(500)
-      .json({ success: false, message: "Error uploading images", error: error.message });
+      .json({
+        success: false,
+        message: "Error uploading images",
+        error: error.message,
+      });
   }
 };
 
 const getSliders = async (req, res) => {
   try {
     const sliders = await Slider.find();
-    res.json({ success: true, message: "Sliders fetched successfully", data: sliders });
+    res.json({
+      success: true,
+      message: "Sliders fetched successfully",
+      data: sliders,
+    });
   } catch (error) {
     console.error("Error in getSliders:", {
       message: error.message,
@@ -1152,7 +1154,11 @@ const getSliders = async (req, res) => {
     });
     res
       .status(500)
-      .json({ success: false, message: "Error fetching sliders", error: error.message });
+      .json({
+        success: false,
+        message: "Error fetching sliders",
+        error: error.message,
+      });
   }
 };
 
@@ -1183,16 +1189,34 @@ const uploadLogo = async (req, res) => {
       .json({ success: true, message: "Logo uploaded", data: newLogo });
   } catch (err) {
     console.error("Upload failed:", err);
-    res.status(500).json({ success: false, message: "Logo upload failed", error: err.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Logo upload failed",
+        error: err.message,
+      });
   }
 };
 
 const logoGet = async (req, res) => {
   try {
     const logo = await Logo.findOne().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, message: "Logo fetched successfully", data: logo || null });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Logo fetched successfully",
+        data: logo || null,
+      });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Error fetching logo", error: err.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching logo",
+        error: err.message,
+      });
   }
 };
 
@@ -1221,10 +1245,22 @@ const saveImpacts = async (req, res) => {
       );
     }
 
-    res.status(200).json({ success: true, message: "Impact counts updated successfully", data: updates });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Impact counts updated successfully",
+        data: updates,
+      });
   } catch (error) {
     console.error("Error updating impact counts:", error);
-    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
   }
 };
 
@@ -1232,9 +1268,55 @@ const saveImpacts = async (req, res) => {
 const getImpacts = async (req, res) => {
   try {
     const impacts = await Impact.find();
-    res.status(200).json({ success: true, message: "Impacts fetched successfully", data: impacts });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Impacts fetched successfully",
+        data: impacts,
+      });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Failed to fetch impacts", error: err.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to fetch impacts",
+        error: err.message,
+      });
+  }
+};
+
+const createShelter = async (req, res) => {
+  try {
+    const shelter = new Shelter(req.body);
+    const saved = await shelter.save();
+    res
+      .status(201)
+      .json({ success: true, message: "Shelter created", shelter: saved });
+  } catch (err) {
+    console.error("Shelter create error:", err);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error creating shelter",
+        error: err.message,
+      });
+  }
+};
+
+const getAllShelters = async (req, res) => {
+  try {
+    const shelters = await Shelter.find().sort({ createdAt: -1 });
+    res.status(200).json({ success: true, count: shelters.length, shelters });
+  } catch (err) {
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching shelters",
+        error: err.message,
+      });
   }
 };
 
@@ -1255,7 +1337,13 @@ const getGaudaanSubmissions = async (req, res) => {
     }
 
     const data = await Gaudaan.find().sort({ createdAt: -1 }); // latest first
-    res.status(200).json({ success: true, message: "Gaudaan submissions fetched successfully", data });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Gaudaan submissions fetched successfully",
+        data,
+      });
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -1264,7 +1352,6 @@ const getGaudaanSubmissions = async (req, res) => {
     });
   }
 };
-
 
 const getVolunteerUsers = async (req, res) => {
   try {
@@ -1276,14 +1363,15 @@ const getVolunteerUsers = async (req, res) => {
       success: true,
       message: "Volunteer users fetched successfully",
       count: users.length,
-      volunteers: users
+      volunteers: users,
     });
   } catch (err) {
     console.error("Error fetching volunteer users:", err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
-
 
 const assignVolunteer = async (req, res) => {
   try {
@@ -1302,12 +1390,20 @@ const assignVolunteer = async (req, res) => {
 
     res
       .status(200)
-      .json({success: true, message: "Volunteer assigned successfully", gaudaan: updated });
+      .json({
+        success: true,
+        message: "Volunteer assigned successfully",
+        gaudaan: updated,
+      });
   } catch (error) {
     console.error("Error assigning volunteer:", error);
     res
       .status(500)
-      .json({success: false, message: "Assignment failed", error: error.message });
+      .json({
+        success: false,
+        message: "Assignment failed",
+        error: error.message,
+      });
   }
 };
 
@@ -1348,6 +1444,8 @@ module.exports = {
   logoGet,
   saveImpacts,
   getImpacts,
+  createShelter,
+  getAllShelters,
   getGaudaanSubmissions,
   getVolunteerUsers,
   assignVolunteer,

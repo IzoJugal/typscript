@@ -5,6 +5,7 @@ const VolunteerTask = require("../Model/TaskModel");
 const Slider = require("../Model/SliderModel");
 const Logo = require("../Model/Logo");
 const Gaudaan = require("../Model/GaudaanModel");
+const Shelter = require("../Model/ShelterModel")
 const Impact = require("../Model/Impact");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
@@ -111,13 +112,11 @@ const volunteerSignup = async (req, res) => {
     });
   } catch (err) {
     console.error("Signup Error:", err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server error during signup",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Server error during signup",
+      error: err.message,
+    });
   }
 };
 
@@ -218,13 +217,11 @@ const signUpAuth = async (req, res) => {
     });
   } catch (err) {
     console.error("Signup Error Stack:", err); // shows full trace
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server error during signup",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Server error during signup",
+      error: err.message,
+    });
   }
 };
 
@@ -283,13 +280,11 @@ const sendOTPAuth = async (req, res) => {
       .json({ success: true, message: `OTP sent via ${method}` });
   } catch (err) {
     console.error("Send OTP Error:", err);
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server error while sending OTP",
-        error: err.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Server error while sending OTP",
+      error: err.message,
+    });
   }
 };
 
@@ -441,13 +436,11 @@ const getUserProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "User profile fetched successfully",
-        user,
-      });
+    res.status(200).json({
+      success: true,
+      message: "User profile fetched successfully",
+      user,
+    });
   } catch (error) {
     console.error("Error fetching user profile:", error);
     res
@@ -579,13 +572,11 @@ const getTotalVolunteers = async (req, res) => {
     // Count all users/volunteers who have the role 'volunteer'
     const total = await User.countDocuments({ roles: "volunteer" });
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Total volunteers fetched successfully",
-        totalVolunteers: total,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Total volunteers fetched successfully",
+      totalVolunteers: total,
+    });
   } catch (err) {
     console.error("Error fetching total volunteers:", err);
     res
@@ -614,13 +605,11 @@ const getTotalCities = async (req, res) => {
       return acc;
     }, {});
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Donation counts fetched successfully",
-        counts: result,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Donation counts fetched successfully",
+      counts: result,
+    });
   } catch (err) {
     console.error("Error fetching donation counts by location:", err);
     res
@@ -671,21 +660,17 @@ const getTotalScrapedWeight = async (req, res) => {
 const getImpacts = async (req, res) => {
   try {
     const impacts = await Impact.find();
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Impacts fetched successfully",
-        impacts,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Impacts fetched successfully",
+      impacts,
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch impacts",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch impacts",
+      error: err.message,
+    });
   }
 };
 
@@ -802,21 +787,19 @@ const getDonations = async (req, res) => {
     // 🔄 Route for 'user' to fetch their own donations
     if (userRoles.includes("user")) {
       const donations = await Donation.find({ donor: userId })
-      .populate("dealer", "firstName lastName email phone") 
-      .sort({
-        createdAt: -1,
-      });
+        .populate("dealer", "firstName lastName email phone")
+        .sort({
+          createdAt: -1,
+        });
 
       const donationCount = donations.length;
 
-      return res
-        .status(200)
-        .json({
-          success: true,
-          message: "User donations fetched successfully",
-          count: donationCount,
-          donations,
-        });
+      return res.status(200).json({
+        success: true,
+        message: "User donations fetched successfully",
+        count: donationCount,
+        donations,
+      });
     }
 
     // ✅ Route for 'volunteer' to fetch assigned donations
@@ -839,13 +822,11 @@ const getDonations = async (req, res) => {
           .map((d) => `${d.address} at ${d.pickupTime}`),
       };
 
-      return res
-        .status(200)
-        .json({
-          success: true,
-          message: "Volunteer donations fetched successfully",
-          stats,
-        });
+      return res.status(200).json({
+        success: true,
+        message: "Volunteer donations fetched successfully",
+        stats,
+      });
     }
 
     // ❌ Deny all others
@@ -855,13 +836,11 @@ const getDonations = async (req, res) => {
     });
   } catch (err) {
     console.error("Get donations error:", err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to get donations",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to get donations",
+      error: err.message,
+    });
   }
 };
 
@@ -886,22 +865,18 @@ const updateDonation = async (req, res) => {
       return res.status(404).json({ error: "Donation not found" });
     }
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Donation updated successfully",
-        donation,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Donation updated successfully",
+      donation,
+    });
   } catch (error) {
     console.error("Edit Donation Error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server error while updating donation",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating donation",
+      error: error.message,
+    });
   }
 };
 
@@ -914,13 +889,11 @@ const getDonationsCount = async (req, res) => {
     }
 
     const count = await Donation.countDocuments({ donor: userId });
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Donation count fetched successfully",
-        count,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Donation count fetched successfully",
+      count,
+    });
   } catch (err) {
     console.error("Error fetching donation count:", err);
     res
@@ -952,13 +925,11 @@ const getDonationsCountByStatus = async (req, res) => {
       return acc;
     }, {});
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Donation counts fetched successfully",
-        counts: result,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Donation counts fetched successfully",
+      counts: result,
+    });
   } catch (err) {
     console.error("Error fetching donation counts by status:", err);
     res
@@ -1026,13 +997,11 @@ const getTaskCount = async (req, res) => {
       volunteer: userId,
     });
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Volunteer task count fetched successfully",
-        count,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Volunteer task count fetched successfully",
+      count,
+    });
   } catch (err) {
     console.error("Error fetching volunteer task count:", err);
     res
@@ -1082,13 +1051,11 @@ const getTaskCountByStatus = async (req, res) => {
       result[status] = formatted[status] || 0;
     });
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Volunteer task counts fetched successfully",
-        counts: result,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Volunteer task counts fetched successfully",
+      counts: result,
+    });
   } catch (err) {
     console.error("Error fetching volunteer task counts by status:", err);
     res
@@ -1409,13 +1376,11 @@ const getSliders = async (req, res) => {
       message: error.message,
       stack: error.stack,
     });
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching sliders",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching sliders",
+      error: error.message,
+    });
   }
 };
 
@@ -1435,17 +1400,122 @@ const logoGet = async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching logo:", err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching logo",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching logo",
+      error: err.message,
+    });
   }
 };
 
 //Gaudaan
+const gaudaanForm = async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      address,
+      pickupDate,
+      pickupTime,
+      governmentId,
+      animalRegisteredId,
+      animalType,
+      animalCondition,
+      animalDescription,
+      consent,
+    } = req.body;
+
+    // Validate consent
+    if (consent !== true && consent !== "true") {
+      return res.status(400).json({ message: "Consent is required" });
+    }
+
+    // Validate required fields
+    const requiredFields = {
+      name,
+      email,
+      phone,
+      address,
+      pickupDate,
+      pickupTime,
+      animalType,
+    };
+    for (const [key, value] of Object.entries(requiredFields)) {
+      if (!value || value.trim() === "") {
+        return res.status(400).json({ message: `${key} is required` });
+      }
+    }
+
+    // Validate email and phone formats
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+    if (!/^\d{10}$/.test(phone)) {
+      return res.status(400).json({ message: "Phone must be 10 digits" });
+    }
+
+    // Validate animalRegisteredId if provided
+    if (animalRegisteredId && animalRegisteredId.trim() === "") {
+      return res
+        .status(400)
+        .json({ message: "Animal Registered ID cannot be empty if provided" });
+    }
+
+    const images = req.files ? req.files.map((file) => `/uploads/${file.filename}`) : [];
+
+    const gaudaan = new Gaudaan({
+      name,
+      email,
+      phone,
+      address,
+      pickupDate,
+      pickupTime,
+      images,
+      governmentId: governmentId || "",
+      animalRegisteredId: animalRegisteredId || "",
+      animalType,
+      animalCondition: animalCondition || "healthy",
+      animalDescription: animalDescription || "",
+      consent: consent === "true",
+      donor: req.user.userId,
+    });
+
+    await gaudaan.save();
+    res
+      .status(201)
+      .json({ message: "Gaudaan record created successfully", data: gaudaan });
+  } catch (error) {
+    console.error("Error creating Gaudaan:", error);
+    res
+      .status(400)
+      .json({ message: "Error creating record", error: error.message });
+  }
+};
+
+const getGaudaanByUserId = async (req, res) => {
+  try {
+    const userId = req.user.userId; 
+    const roles = req.user.roles || [];
+
+    if (!roles.includes("user")) {
+      return res.status(403).json({ message: "Access denied: Only users allowed" });
+    }
+
+    const records = await Gaudaan.find({ donor: userId }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Gaudaan records fetched successfully",
+      count: records.length,
+      data: records,
+    });
+  } catch (error) {
+    console.error("Error fetching Gaudaan by user:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
 const getAssignedGaudaan = async (req, res) => {
   try {
     const volunteerId = req.user.userId;
@@ -1479,30 +1549,72 @@ const getAssignedGaudaan = async (req, res) => {
 const updategaudaanStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, shelterId } = req.body;
+    const userId = req.user?.userId;
 
-    const allowed = ["assigned", "picked_up", "shelter", "dropped"];
-    if (!allowed.includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
+    const roles = req.user.roles || [];
+    if (!roles.includes("volunteer")) {
+      return res.status(403).json({ message: "Access denied: Only volunteers allowed" });
     }
 
-    const updated = await Gaudaan.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true }
-    );
-    if (!updated) {
+    const allowedStatuses = [
+      "unassigned",
+      "assigned",
+      "picked_up",
+      "shelter",
+      "dropped",
+      "rejected",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    const donation = await Gaudaan.findById(id);
+    if (!donation) {
       return res.status(404).json({ message: "Donation not found" });
     }
 
-    res.status(200).json({ success: true, message: "Update Details", updated });
+    // If status requires shelter info
+    if (["shelter", "dropped"].includes(status)) {
+      if (!shelterId) {
+        return res.status(400).json({ message: "shelterId is required for this status" });
+      }
+
+      // Optionally: Check if shelterId exists in the database
+      const shelterExists = await Shelter.findById(shelterId);
+      if (!shelterExists) {
+        return res.status(404).json({ message: "Shelter not found" });
+      }
+
+      donation.shelterId = shelterId;
+    }
+
+    // Update status and history
+    donation.status = status;
+    donation.lastModifiedBy = userId || null;
+    donation.statusHistory.push({
+      status,
+      changedBy: userId || null,
+    });
+
+    const updated = await donation.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Status updated successfully",
+      updated,
+    });
   } catch (err) {
     console.error("Status update error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating status",
+      error: err.message,
+    });
   }
 };
+
 
 module.exports = {
   volunteerSignup,
@@ -1536,6 +1648,8 @@ module.exports = {
   addPriceandweight,
   getSliders,
   logoGet,
+  gaudaanForm,
+  getGaudaanByUserId,
   getAssignedGaudaan,
   updategaudaanStatus,
 };

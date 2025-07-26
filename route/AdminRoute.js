@@ -109,6 +109,11 @@ router.route("/impacts").get(adminMiddleware, controller.getImpacts);
 
 router.route("/impacts").post(adminMiddleware, controller.saveImpacts); 
 
+//Shelter
+router.post('/shelters', adminMiddleware,  controller.createShelter);
+
+router.get('/shelters', adminMiddleware,  controller.getAllShelters);
+
 //Gaudaan Data
 router.route("/gaudaan").get(adminMiddleware, controller.getGaudaanSubmissions); 
 

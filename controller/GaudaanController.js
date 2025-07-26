@@ -1,89 +1,6 @@
 const Gaudaan = require("../Model/GaudaanModel");
 const User = require("../Model/AuthModel");
 
-const gaudaanForm = async (req, res) => {
-  try {
-    const { name, email, phone, address, pickupDate, pickupTime, location } =
-      req.body;
-
-    // 🔍 Validate text fields
-    if (
-      !name ||
-      !email ||
-      !phone ||
-      !address ||
-      !pickupDate ||
-      !pickupTime ||
-      !location
-    ) {
-      return res.status(400).json({ success: false, message: "Name,email,phone,address,pickupDate,pickupTime,location are required" });
-    }
-
-    // 🔍 Validate location format
-    let parsedLocation;
-    try {
-      parsedLocation = JSON.parse(location);
-      if (
-        typeof parsedLocation.lat !== "number" ||
-        typeof parsedLocation.lng !== "number"
-      ) {
-        throw new Error("Invalid lat/lng");
-      }
-    } catch (err) {
-      return res.status(400).json({ success: false, message: "Invalid location format" });
-    }
-
-    // 🔍 Validate file uploads
-    if (!req.files || req.files.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "At least one image is required" });
-    }
-
-    if (req.files.length > 2) {
-      return res.status(400).json({ success: false, message: "Maximum 2 images allowed" });
-    }
-
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-    const invalidFiles = req.files.filter(
-      (file) => !allowedTypes.includes(file.mimetype)
-    );
-
-    if (invalidFiles.length > 0) {
-      return res
-        .status(400)
-        .json({ message: "Only JPG, PNG, and WEBP files allowed" });
-    }
-
-    const imagePaths = req.files.map((file) => `/uploads/${file.filename}`);
-    // Convert 24-hour time to 12-hour format with AM/PM
-    function convertToAmPm(timeStr) {
-      const [hourStr, minute] = timeStr.split(":");
-      const hour = parseInt(hourStr, 10);
-      const suffix = hour >= 12 ? "PM" : "AM";
-      const hour12 = hour % 12 || 12;
-      return `${hour12}:${minute} ${suffix}`;
-    }
-    const formattedTime = convertToAmPm(pickupTime);
-
-    const gaudaan = new Gaudaan({
-      name,
-      email,
-      phone,
-      address,
-      pickupDate,
-      pickupTime: formattedTime,
-      location: parsedLocation,
-      images: imagePaths,
-    });
-
-    await gaudaan.save();
-    res.status(201).json({ success: true, message: "Gaudaan submitted", gaudaan });
-  } catch (error) {
-    console.error("Error in upload:", error);
-    res.status(500).json({ success: false, message: "Upload failed", error: error.message });
-  }
-};
 
 const getGaudaanSubmissions = async (req, res) => {
   try {
@@ -199,7 +116,6 @@ const updategaudaanStatus = async (req, res) => {
 };
 
 module.exports = {
-  gaudaanForm,
   getGaudaanSubmissions,
   getUsersByRole,
   assignVolunteer,

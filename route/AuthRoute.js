@@ -98,7 +98,25 @@ router.route("/donation/:id/status").patch(authMiddleware,controller.updateDonat
 router.route("/donations/:id/update").patch(authMiddleware, controller.addPriceandweight);
 
 //Gaudaan
-router.route("/assigned").get(authMiddleware, controller.getAssignedGaudaan);
+
+const gupload = multer({
+  storage,
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images are allowed'), false);
+    }
+  },
+});
+
+// POST route to create a Gaudaan record
+router.route('/gaudaan').post(authMiddleware, gupload.array('images', 2), controller.gaudaanForm);
+
+router.route("/gaudaan/user").get(authMiddleware, controller.getGaudaanByUserId);
+
+router.route("/assignedgaudaan").get(authMiddleware, controller.getAssignedGaudaan);
 
 router.route("/updateStatus/:id").patch(authMiddleware, controller.updategaudaanStatus);
 
