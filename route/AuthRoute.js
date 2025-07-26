@@ -118,6 +118,8 @@ router.route("/gaudaan/user").get(authMiddleware, controller.getGaudaanByUserId)
 
 router.route("/assignedgaudaan").get(authMiddleware, controller.getAssignedGaudaan);
 
+router.route('/shelters').get(authMiddleware, controller.getAllShelters);
+
 router.route("/updateStatus/:id").patch(authMiddleware, controller.updategaudaanStatus);
 
 

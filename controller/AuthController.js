@@ -1550,6 +1550,21 @@ const getAssignedGaudaan = async (req, res) => {
   }
 };
 
+const getAllShelters = async (req, res) => {
+  try {
+    const shelters = await Shelter.find().sort({ createdAt: -1 });
+    res.status(200).json({ success: true, count: shelters.length, shelters });
+  } catch (err) {
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching shelters",
+        error: err.message,
+      });
+  }
+};
+
 const updategaudaanStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1655,5 +1670,6 @@ module.exports = {
   gaudaanForm,
   getGaudaanByUserId,
   getAssignedGaudaan,
+  getAllShelters,
   updategaudaanStatus,
 };
