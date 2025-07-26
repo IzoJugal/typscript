@@ -1536,7 +1536,8 @@ const getAssignedGaudaan = async (req, res) => {
 
     const assignedGaudaan = await Gaudaan.find({
       assignedVolunteer: volunteerId,
-    }).populate("assignedVolunteer", "firstName lastName email"); // Optional
+    }).populate("assignedVolunteer", "firstName lastName email")
+    .populate("donor","firstName lastName phone"); 
 
     res.status(200).json({
       success: true,
