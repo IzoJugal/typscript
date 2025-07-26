@@ -1336,7 +1336,11 @@ const getGaudaanSubmissions = async (req, res) => {
       });
     }
 
-    const data = await Gaudaan.find().sort({ createdAt: -1 }); // latest first
+    const data = await Gaudaan.find()
+    .populate("assignedVolunteer", "firstName lastName phone")
+    .populate("shelterId", "name address phone")
+    .sort({ createdAt: -1 }); 
+    
     res
       .status(200)
       .json({

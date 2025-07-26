@@ -1502,7 +1502,10 @@ const getGaudaanByUserId = async (req, res) => {
       return res.status(403).json({ message: "Access denied: Only users allowed" });
     }
 
-    const records = await Gaudaan.find({ donor: userId }).sort({ createdAt: -1 });
+    const records = await Gaudaan.find({ donor: userId })
+    .populate("assignedVolunteer", "firstName lastName phone")
+    .populate("shelterId", "name address phone")
+    .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
