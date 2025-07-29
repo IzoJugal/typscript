@@ -5,12 +5,21 @@ const VolunteerTask = require("../Model/TaskModel");
 const Slider = require("../Model/SliderModel");
 const Logo = require("../Model/Logo");
 const Gaudaan = require("../Model/GaudaanModel");
-const Shelter = require("../Model/ShelterModel")
+const Shelter = require("../Model/ShelterModel");
 const Impact = require("../Model/Impact");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
+const { log } = require("console");
+
+let gfs;
+const conn = mongoose.connection;
+conn.once("open", () => {
+  gfs = new mongoose.mongo.GridFSBucket(conn.db, {
+    bucketName: "uploads",
+  });
+});
 
 // Volunteer data
 const volunteerSignup = async (req, res) => {
@@ -168,7 +177,7 @@ const signUpAuth = async (req, res) => {
       roles = [roles];
     }
 
-    const allowedRoles = ["user", "admin", "dealer"];
+    const allowedRoles = ["user", "admin", "dealer", "recycler"];
     const validRoles = Array.isArray(roles)
       ? roles.filter((role) => allowedRoles.includes(role))
       : ["user"];
@@ -465,15 +474,39 @@ const updateUserProfile = async (req, res) => {
     if (phone) user.phone = phone;
     if (email) user.email = email;
 
-    // Single profile image
-    if (
-      req.files &&
-      req.files.profileImage &&
-      req.files.profileImage.length > 0
-    ) {
-      user.profileImage = req.files.profileImage[0].path;
+    if (req.files && req.files.profileImage && req.files.profileImage[0]) {
+      const file = req.files.profileImage[0];
+
+      // Delete previous profile image from GridFS if it exists
+      if (user.profileImage) {
+        const oldImage = await conn.db.collection("uploads.files").findOne({
+          filename: user.profileImage,
+        });
+        if (oldImage) {
+          await gfs.delete(new mongoose.Types.ObjectId(oldImage._id));
+        }
+      }
+
+      // Upload new image to GridFS
+      const filename = `${Date.now()}-${file.originalname}`;
+      const uploadStream = gfs.openUploadStream(filename, {
+        contentType: file.mimetype,
+      });
+
+      // Write file buffer to GridFS
+      uploadStream.write(file.buffer);
+      uploadStream.end();
+
+      // Wait for upload to complete
+      await new Promise((resolve, reject) => {
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error", reject);
+      });
+
+      // Store the filename in the user document
+      user.profileImage = filename;
     } else if (req.body.profileImage) {
-      user.profileImage = req.body.profileImage;
+      user.profileImage = req.body.profileImage; // Handle case where no new file is uploaded
     }
 
     await user.save();
@@ -488,6 +521,30 @@ const updateUserProfile = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+const getProfileImage = async (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const file = await conn.db
+      .collection("uploads.files")
+      .findOne({ filename });
+
+    if (!file) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    const downloadStream = gfs.openDownloadStreamByName(filename);
+    res.set("Content-Type", file.contentType);
+    downloadStream.pipe(res);
+
+    downloadStream.on("error", () => {
+      res.status(404).json({ message: "Error retrieving file" });
+    });
+  } catch (err) {
+    console.error("Error retrieving file:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -1180,7 +1237,7 @@ const getDonationsByDealer = async (req, res) => {
 
     // Find donations assigned to the logged-in dealer
     const donations = await Donation.find({ dealer: userId })
-      .populate("donor", "firstName email")
+      .populate("donor", "firstName email profileImage")
       .populate("dealer", "firstName email")
       .sort({ createdAt: -1 });
 
@@ -1195,6 +1252,50 @@ const getDonationsByDealer = async (req, res) => {
     return res
       .status(500)
       .json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+const getDonationById = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const userRoles = req.user?.roles || [];
+    const { id } = req.params;
+
+    // Must be authenticated
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    // Must be dealer
+    if (!userRoles.includes("dealer")) {
+      return res.status(403).json({ message: "Access denied: Dealers only" });
+    }
+
+    // Find donation by ID and dealer match
+    const donation = await Donation.findOne({ _id: id, dealer: userId })
+      .populate("donor", "firstName lastName email phone")
+      .populate("dealer", "firstName email");
+
+    if (!donation) {
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message: "Donation not found or not assigned to you",
+        });
+    }
+
+    return res.status(200).json({
+      success: true,
+      donation,
+    });
+  } catch (err) {
+    console.error("Error fetching donation by ID:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 
@@ -1224,7 +1325,7 @@ const getPickupDonations = async (req, res) => {
     const pickupDonations = await Donation.find({
       status: { $in: pickupStatuses },
       dealer: userId,
-    }).populate("donor", "firstName lastName email");
+    }).populate("donor", "firstName lastName email profileImage");
 
     return res.status(200).json({
       success: true,
@@ -1359,6 +1460,52 @@ const addPriceandweight = async (req, res) => {
   }
 };
 
+const getHistory = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const userRoles = req.user?.roles || [];
+
+    // Must be authenticated
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: No user found" });
+    }
+
+    // Must have 'dealer' role
+    if (!userRoles.includes("dealer")) {
+      return res.status(403).json({ message: "Access denied: Dealers only" });
+    }
+
+    // Only fetch donated pickups for this dealer
+    const donatedStatus = ["donated", "processed", "recycled"];
+
+    const totalDonatedCount = await Donation.countDocuments({
+      status: donatedStatus,
+      dealer: userId,
+    });
+
+    const donatedPickups = await Donation.find({
+      status: donatedStatus,
+      dealer: userId,
+    })
+      .populate("donor", "firstName lastName email")
+      .populate("recycler", "firstName lastName email");
+
+    return res.status(200).json({
+      success: true,
+      message: "Donated pickups fetched successfully",
+      totalPickups: totalDonatedCount,
+      donations: donatedPickups,
+    });
+  } catch (error) {
+    console.error("Error fetching donated pickups:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
 //Sliders Image
 const getSliders = async (req, res) => {
   try {
@@ -1462,7 +1609,9 @@ const gaudaanForm = async (req, res) => {
         .json({ message: "Animal Registered ID cannot be empty if provided" });
     }
 
-    const images = req.files ? req.files.map((file) => `/uploads/${file.filename}`) : [];
+    const images = req.files
+      ? req.files.map((file) => `/uploads/${file.filename}`)
+      : [];
 
     const gaudaan = new Gaudaan({
       name,
@@ -1495,17 +1644,19 @@ const gaudaanForm = async (req, res) => {
 
 const getGaudaanByUserId = async (req, res) => {
   try {
-    const userId = req.user.userId; 
+    const userId = req.user.userId;
     const roles = req.user.roles || [];
 
     if (!roles.includes("user")) {
-      return res.status(403).json({ message: "Access denied: Only users allowed" });
+      return res
+        .status(403)
+        .json({ message: "Access denied: Only users allowed" });
     }
 
     const records = await Gaudaan.find({ donor: userId })
-    .populate("assignedVolunteer", "firstName lastName phone")
-    .populate("shelterId", "name address phone")
-    .sort({ createdAt: -1 });
+      .populate("assignedVolunteer", "firstName lastName phone")
+      .populate("shelterId", "name address phone")
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -1515,7 +1666,9 @@ const getGaudaanByUserId = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching Gaudaan by user:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -1536,8 +1689,9 @@ const getAssignedGaudaan = async (req, res) => {
 
     const assignedGaudaan = await Gaudaan.find({
       assignedVolunteer: volunteerId,
-    }).populate("assignedVolunteer", "firstName lastName email")
-    .populate("donor","firstName lastName phone"); 
+    })
+      .populate("assignedVolunteer", "firstName lastName email")
+      .populate("donor", "firstName lastName phone");
 
     res.status(200).json({
       success: true,
@@ -1555,13 +1709,11 @@ const getAllShelters = async (req, res) => {
     const shelters = await Shelter.find().sort({ createdAt: -1 });
     res.status(200).json({ success: true, count: shelters.length, shelters });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching shelters",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching shelters",
+      error: err.message,
+    });
   }
 };
 
@@ -1573,7 +1725,9 @@ const updategaudaanStatus = async (req, res) => {
 
     const roles = req.user.roles || [];
     if (!roles.includes("volunteer")) {
-      return res.status(403).json({ message: "Access denied: Only volunteers allowed" });
+      return res
+        .status(403)
+        .json({ message: "Access denied: Only volunteers allowed" });
     }
 
     const allowedStatuses = [
@@ -1597,7 +1751,9 @@ const updategaudaanStatus = async (req, res) => {
     // If status requires shelter info
     if (["shelter", "dropped"].includes(status)) {
       if (!shelterId) {
-        return res.status(400).json({ message: "shelterId is required for this status" });
+        return res
+          .status(400)
+          .json({ message: "shelterId is required for this status" });
       }
 
       // Optionally: Check if shelterId exists in the database
@@ -1634,6 +1790,177 @@ const updategaudaanStatus = async (req, res) => {
   }
 };
 
+// Rycycaler
+const getRecyclers = async (req, res) => {
+  try {
+    const recyclers = await User.find({ roles: "recycler" });
+    res.status(200).json({ success: true, recyclers });
+  } catch (error) {
+    console.error("Error fetching recyclers:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+const assignRecycler = async (req, res) => {
+  const { id } = req.params;
+  const { recyclerId } = req.body;
+  const dealerId = req.user.userId;
+  const userRoles = req.user.roles;
+
+  try {
+    if (!userRoles.includes("dealer")) {
+      return res
+        .status(403)
+        .json({ message: "Only dealers can assign recycler" });
+    }
+
+    const donation = await Donation.findById(id);
+
+    if (!donation) {
+      return res.status(404).json({ message: "Donation not found" });
+    }
+
+    if (donation.status !== "donated") {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Donation must be marked as 'donated' before assigning recycler",
+        });
+    }
+
+    if (String(donation.dealer) !== dealerId) {
+      return res
+        .status(403)
+        .json({
+          message: "You can only assign recycler to your own donations",
+        });
+    }
+
+    const recycler = await User.findById(recyclerId);
+
+    if (!recycler || !recycler.roles.includes("recycler")) {
+      return res.status(400).json({ message: "Invalid recycler" });
+    }
+
+    donation.recycler = recyclerId;
+    donation.activityLog.push({
+      action: "assigned",
+      by: dealerId,
+      note: "Recycler assigned by dealer",
+    });
+
+    await donation.save();
+
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Recycler assigned successfully",
+        donation,
+      });
+  } catch (err) {
+    console.error("Assign Recycler Error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+const getRecyclerDonations = async (req, res) => {
+  const userId = req.user.userId;
+  const roles = req.user.roles;
+
+  if (!roles.includes("recycler")) {
+    return res.status(403).json({ message: "Access denied" });
+  }
+
+  try {
+    const donations = await Donation.find({
+      recycler: userId,
+      status: { $in: ["processed", "donated"] },
+    })
+      .populate("donor", "firstName lastName email phone")
+      .populate("dealer", "firstName email")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: donations.length,
+      donations,
+    });
+  } catch (err) {
+    console.error("Recycler fetch error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+const getRecycleDonations = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const roles = req.user?.roles || [];
+
+    if (!userId || !roles.includes("recycler")) {
+      return res.status(403).json({ message: "Access denied: Recycler only" });
+    }
+
+    const donations = await Donation.find({
+      recycler: userId,
+      status: "recycled",
+    })
+      .populate("donor", "firstName lastName email phone")
+      .populate("dealer", "firstName lastName email")
+      .sort({ updatedAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: donations.length,
+      donations,
+    });
+  } catch (err) {
+    console.error("Error fetching recycler donations:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+const recyclerUpdateStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status, note } = req.body;
+  const recyclerId = req.user.userId;
+
+  try {
+    const donation = await Donation.findById(id);
+
+    if (!donation)
+      return res.status(404).json({ message: "Donation not found" });
+
+    if (String(donation.recycler) !== recyclerId) {
+      return res
+        .status(403)
+        .json({ message: "You are not authorized to update this donation" });
+    }
+
+    if (!["recycled", "processed"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status update" });
+    }
+
+    donation.status = status;
+    donation.activityLog.push({
+      action: status,
+      by: recyclerId,
+      note,
+    });
+
+    await donation.save();
+
+    res
+      .status(200)
+      .json({ success: true, message: "Donation updated", donation });
+  } catch (err) {
+    console.error("Update recycler status error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
 
 module.exports = {
   volunteerSignup,
@@ -1645,6 +1972,7 @@ module.exports = {
   fetchUsers,
   getUserProfile,
   updateUserProfile,
+  getProfileImage,
   changePassword,
   assignVolunteerRole,
   getTotalVolunteers,
@@ -1653,6 +1981,7 @@ module.exports = {
   getImpacts,
   createDonation,
   getDonations,
+  getDonationById,
   updateDonation,
   getDonationsCount,
   getDonationsCountByStatus,
@@ -1665,6 +1994,7 @@ module.exports = {
   getPickupDonations,
   updateDonationStatus,
   addPriceandweight,
+  getHistory,
   getSliders,
   logoGet,
   gaudaanForm,
@@ -1672,4 +2002,9 @@ module.exports = {
   getAssignedGaudaan,
   getAllShelters,
   updategaudaanStatus,
+  getRecyclers,
+  assignRecycler,
+  getRecyclerDonations,
+  getRecycleDonations,
+  recyclerUpdateStatus,
 };

@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpires: Date,
     roles: {
       type: [String],
-      enum: ["user", "volunteer", "admin", "dealer"],
+      enum: ["user", "volunteer", "admin", "dealer","recycler"],
       default: ["user"],
       validate: {
         validator: function (roles) {

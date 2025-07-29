@@ -14,7 +14,8 @@ const app = express();
 
 // 🌍 CORS Configuration
 const corsOptions = {
-  origin: ["http://localhost:5173", "https://api.gauabhayaranyam.com"],
+  // origin: ["http://localhost:5173", "https://api.gauabhayaranyam.com"],
+  origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   credentials: true,
 };
@@ -25,6 +26,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // 🗂️ Serve static uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+console.log("Static files served from:", path.join(__dirname, "uploads"));
+
 
 app.use("/uploads", express.static("uploads"));
 

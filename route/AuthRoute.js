@@ -1,14 +1,28 @@
+const mongoose = require("mongoose");
 const express = require("express");
 const router = express.Router();
 const controller = require("../controller/AuthController");
 const authMiddleware = require("../middleware/authMiddleware");
 const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+const uploadPath = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath);
+}
+
+// Initialize GridFS
+let gfs;
+const conn = mongoose.connection;
+conn.once("open", () => {
+  gfs = new mongoose.mongo.GridFSBucket(conn.db, {
+    bucketName: "uploads", // Name of the GridFS bucket
+  });
 });
 
+
+const storage = multer.memoryStorage(); // Use memory storage instead of disk
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
@@ -18,7 +32,6 @@ const upload = multer({
     cb(null, true);
   },
 });
-
 // Accept 1 profileImage + multiple images fields:
 const uploadMultiple = upload.fields([
   { name: "profileImage", maxCount: 1 },
@@ -91,11 +104,15 @@ router.route("/delete-account").delete(authMiddleware, controller.deleteAccount)
 //Dealers Data
 router.route("/donations/dealer").get(authMiddleware,controller.getDonationsByDealer);
 
+router.route("/donation/:id").get(authMiddleware, controller.getDonationById);
+
 router.route("/getpickupdonations").get(authMiddleware, controller.getPickupDonations);
 
 router.route("/donation/:id/status").patch(authMiddleware,controller.updateDonationStatus);
 
 router.route("/donations/:id/update").patch(authMiddleware, controller.addPriceandweight);
+
+router.route("/donations/history").get(authMiddleware, controller.getHistory);
 
 //Gaudaan
 
@@ -111,7 +128,6 @@ const gupload = multer({
   },
 });
 
-// POST route to create a Gaudaan record
 router.route('/gaudaan').post(authMiddleware, gupload.array('images', 2), controller.gaudaanForm);
 
 router.route("/gaudaan/user").get(authMiddleware, controller.getGaudaanByUserId);
@@ -121,6 +137,17 @@ router.route("/assignedgaudaan").get(authMiddleware, controller.getAssignedGauda
 router.route('/shelters').get(authMiddleware, controller.getAllShelters);
 
 router.route("/updateStatus/:id").patch(authMiddleware, controller.updategaudaanStatus);
+
+//Rycycaler
+router.route("/recyclers").get(authMiddleware, controller.getRecyclers);
+
+router.route("/:id/assign-recycler").patch(authMiddleware, controller.assignRecycler);
+
+router.route("/recycler/assigned",).get(authMiddleware, controller.getRecyclerDonations);
+
+router.route("/recycle").get(authMiddleware, controller.getRecycleDonations);
+
+router.route("/:id/update-status").patch(authMiddleware, controller.recyclerUpdateStatus);
 
 
 module.exports = router;
