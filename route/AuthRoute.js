@@ -65,6 +65,8 @@ router.route("/profile").get(authMiddleware, controller.getUserProfile);
 
 router.route("/profile").patch(authMiddleware, uploadMultiple, controller.updateUserProfile);
 
+router.route("/profile/image/:filename").get(authMiddleware, controller.getProfileImage);
+
 router.route("/password").patch(authMiddleware, controller.changePassword);
 
 // router.route("/volunteers/total").get(authMiddleware, controller.getTotalVolunteers);

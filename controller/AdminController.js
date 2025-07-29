@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Admin = require("../Model/AuthModel");
 const User = require("../Model/AuthModel");
 const Donation = require("../Model/DonationModel");
@@ -11,6 +12,15 @@ const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const path = require("path");
+
+let gfs;
+const conn = mongoose.connection;
+conn.once("open", () => {
+  gfs = new mongoose.mongo.GridFSBucket(conn.db, {
+    bucketName: "uploads",
+  });
+});
+
 
 const getAdmin = async (req, res) => {
   try {
@@ -77,6 +87,10 @@ const getAdminProfile = async (req, res) => {
 
 const updateAdminProfile = async (req, res) => {
   try {
+    if (!gfs) {
+      throw new Error("GridFS is not initialized");
+    }
+
     const userId = req.user.userId;
     const { firstName, lastName, phone, email } = req.body;
 
@@ -91,6 +105,39 @@ const updateAdminProfile = async (req, res) => {
     if (phone) admin.phone = phone;
     if (email) admin.email = email;
 
+    // Handle profile image with GridFS
+    if (req.files && req.files.profileImage && req.files.profileImage[0]) {
+      const file = req.files.profileImage[0];
+
+      // Delete previous profile image from GridFS if it exists
+      if (admin.profileImage) {
+        const oldImage = await conn.db.collection("uploads.files").findOne({
+          filename: admin.profileImage,
+        });
+        if (oldImage) {
+          await gfs.delete(new mongoose.Types.ObjectId(oldImage._id));
+        }
+      }
+
+      // Upload new image to GridFS
+      const filename = `${Date.now()}-${file.originalname}`;
+      const uploadStream = gfs.openUploadStream(filename, {
+        contentType: file.mimetype,
+      });
+
+      uploadStream.write(file.buffer);
+      uploadStream.end();
+
+      await new Promise((resolve, reject) => {
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error", reject);
+      });
+
+      admin.profileImage = filename;
+    } else if (req.body.profileImage) {
+      admin.profileImage = req.body.profileImage;
+    }
+
     await admin.save();
 
     const updatedAdmin = admin.toObject();
@@ -101,12 +148,37 @@ const updateAdminProfile = async (req, res) => {
       admin: updatedAdmin,
     });
   } catch (error) {
-    console.error("Error updating profile:", error);
+    console.error("Error updating admin profile:", error);
     res.status(500).json({
       success: false,
       message: "Server error",
       error: error.message,
     });
+  }
+};
+
+const getAdminProfileImage = async (req, res) => {
+  try {
+    if (!gfs) {
+      throw new Error("GridFS is not initialized");
+    }
+    const filename = req.params.filename;
+    const file = await conn.db.collection("uploads.files").findOne({ filename });
+
+    if (!file) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    const downloadStream = gfs.openDownloadStreamByName(filename);
+    res.set("Content-Type", file.contentType);
+    downloadStream.pipe(res);
+
+    downloadStream.on("error", () => {
+      res.status(404).json({ message: "Error retrieving file" });
+    });
+  } catch (err) {
+    console.error("Error retrieving file:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -1415,6 +1487,7 @@ module.exports = {
   getAdmin,
   getAdminProfile,
   updateAdminProfile,
+  getAdminProfileImage,
   changePassword,
   PickedUpAndDonated,
   getTotalScrapedWeight,

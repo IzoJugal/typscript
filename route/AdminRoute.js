@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const express = require("express");
 const router = express.Router();
 const controller = require("../controller/AdminController");
@@ -5,26 +6,31 @@ const adminMiddleware = require("../middleware/adminMiddleware");
 const multer = require("multer");
 const path = require("path");
 
-// Storage config
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/'); // Ensure this folder exists
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
-  },
+let gfs;
+const conn = mongoose.connection;
+conn.once("open", () => {
+  gfs = new mongoose.mongo.GridFSBucket(conn.db, {
+    bucketName: "uploads", // Name of the GridFS bucket
+  });
 });
 
-const fileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
-    cb(null, true);
-  } else {
-    cb(new Error('Only images are allowed'), false);
-  }
-};
 
-const upload = multer({ storage, fileFilter });
+const storage = multer.memoryStorage(); // Use memory storage instead of disk
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only image files are allowed"), false);
+    }
+    cb(null, true);
+  },
+});
+// Accept 1 profileImage + multiple images fields:
+const uploadMultiple = upload.fields([
+  { name: "profileImage", maxCount: 1 },
+  { name: "images", maxCount: 10 }, // max 10 images (adjust as needed)
+]);
+
 
 
 router.route("/admin").get(adminMiddleware, controller.getAdmin);
@@ -32,7 +38,9 @@ router.route("/admin").get(adminMiddleware, controller.getAdmin);
 //Admin 
 router.route("/profile").get(adminMiddleware, controller.getAdminProfile);
 
-router.route("/profile").patch(adminMiddleware, controller.updateAdminProfile);
+router.route("/profile").patch(adminMiddleware, uploadMultiple, controller.updateAdminProfile);
+
+router.route("/profile/image/:filename").get(adminMiddleware, controller.getAdminProfileImage)
 
 router.route("/password").patch(adminMiddleware, controller.changePassword);
 
