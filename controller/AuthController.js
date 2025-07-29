@@ -753,11 +753,11 @@ const createDonation = async (req, res) => {
     let uploadedImages = [];
 
     if (req.files?.images) {
-      const filesArray = Array.isArray(req.files.images)
+      const files = Array.isArray(req.files.images)
         ? req.files.images
         : [req.files.images];
 
-      uploadedImages = filesArray.map((file) => ({
+      uploadedImages = files.map((file) => ({
         url: file.path,
       }));
     }
@@ -1277,12 +1277,10 @@ const getDonationById = async (req, res) => {
       .populate("dealer", "firstName email profileImage");
 
     if (!donation) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Donation not found or not assigned to you",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Donation not found or not assigned to you",
+      });
     }
 
     return res.status(200).json({
@@ -1795,8 +1793,13 @@ const getRecyclers = async (req, res) => {
   try {
     const roles = req.user.roles;
     const recyclers = await User.find({ roles: "recycler" });
-      if (!req.user || !roles.some(role => req.user.roles.includes("dealer"))) {
-      return res.status(403).json({ success: false, message: `Access denied for role(s): ${req.user?.roles?.join(", ")}` });
+    if (!req.user || !roles.some((role) => req.user.roles.includes("dealer"))) {
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: `Access denied for role(s): ${req.user?.roles?.join(", ")}`,
+        });
     }
     res.status(200).json({ success: true, recyclers });
   } catch (error) {
@@ -1827,20 +1830,16 @@ const assignRecycler = async (req, res) => {
     }
 
     if (donation.status !== "donated") {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Donation must be marked as 'donated' before assigning recycler",
-        });
+      return res.status(400).json({
+        message:
+          "Donation must be marked as 'donated' before assigning recycler",
+      });
     }
 
     if (String(donation.dealer) !== dealerId) {
-      return res
-        .status(403)
-        .json({
-          message: "You can only assign recycler to your own donations",
-        });
+      return res.status(403).json({
+        message: "You can only assign recycler to your own donations",
+      });
     }
 
     const recycler = await User.findById(recyclerId);
@@ -1858,13 +1857,11 @@ const assignRecycler = async (req, res) => {
 
     await donation.save();
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Recycler assigned successfully",
-        donation,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Recycler assigned successfully",
+      donation,
+    });
   } catch (err) {
     console.error("Assign Recycler Error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
