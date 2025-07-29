@@ -752,35 +752,46 @@ const createDonation = async (req, res) => {
 
     let uploadedImages = [];
 
-    if (req.files?.images) {
-      const files = Array.isArray(req.files.images)
-        ? req.files.images
-        : [req.files.images];
+// 1️⃣ Handle file uploads (from multipart/form-data)
+if (req.files?.images) {
+  const files = Array.isArray(req.files.images)
+    ? req.files.images
+    : [req.files.images];
 
-      uploadedImages = files.map((file) => ({
-        url: file.path,
-      }));
+  uploadedImages = files
+    .map((file) => {
+      // 👇 Confirm where the actual URL/identifier is
+      const url = file.path || file.location || `/uploads/${file.filename}` || "";
+      return url ? { url } : null;
+    })
+    .filter(Boolean); // Removes nulls
+}
+
+// 2️⃣ Handle URL-based images from body
+let urlImages = [];
+if (req.body.images) {
+  try {
+    const parsed =
+      typeof req.body.images === "string"
+        ? JSON.parse(req.body.images)
+        : req.body.images;
+
+    if (Array.isArray(parsed)) {
+      // only include images with url
+      urlImages = parsed.filter((img) => img?.url);
     }
+  } catch (err) {
+    return res.status(400).json({ message: "Invalid images format in body" });
+  }
+}
 
-    // 🔹 Images from body (URLs)
-    let urlImages = [];
-    if (req.body.images) {
-      try {
-        const parsed =
-          typeof req.body.images === "string"
-            ? JSON.parse(req.body.images)
-            : req.body.images;
+// 3️⃣ Combine both sources
+const images = [...uploadedImages, ...urlImages];
 
-        if (Array.isArray(parsed)) {
-          urlImages = parsed;
-        }
-      } catch (err) {
-        return res.status(400).json({ message: "Invalid images format" });
-      }
-    }
-
-    // 🔹 Combine both
-    const images = [...uploadedImages, ...urlImages];
+// 4️⃣ Final check
+if (images.length === 0) {
+  return res.status(400).json({ message: "No valid images provided." });
+}
 
     if (
       !scrapType ||
@@ -1794,12 +1805,10 @@ const getRecyclers = async (req, res) => {
     const roles = req.user.roles;
     const recyclers = await User.find({ roles: "recycler" });
     if (!req.user || !roles.some((role) => req.user.roles.includes("dealer"))) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: `Access denied for role(s): ${req.user?.roles?.join(", ")}`,
-        });
+      return res.status(403).json({
+        success: false,
+        message: `Access denied for role(s): ${req.user?.roles?.join(", ")}`,
+      });
     }
     res.status(200).json({ success: true, recyclers });
   } catch (error) {
