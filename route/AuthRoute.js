@@ -69,12 +69,6 @@ router.route("/profile/image/:filename").get( controller.getProfileImage);
 
 router.route("/password").patch(authMiddleware, controller.changePassword);
 
-// router.route("/volunteers/total").get(authMiddleware, controller.getTotalVolunteers);
-
-// router.route("/count-city").get(authMiddleware, controller.getTotalCities);
-
-// router.route("/count-scraped").get(authMiddleware, controller.getTotalScrapedWeight);
-
 router.route("/impacts").get( controller.getImpacts);
 
 //Donations

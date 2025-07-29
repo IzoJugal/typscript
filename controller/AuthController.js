@@ -1238,7 +1238,7 @@ const getDonationsByDealer = async (req, res) => {
     // Find donations assigned to the logged-in dealer
     const donations = await Donation.find({ dealer: userId })
       .populate("donor", "firstName email profileImage")
-      .populate("dealer", "firstName email")
+      .populate("dealer", "firstName email profileImage")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -1274,7 +1274,7 @@ const getDonationById = async (req, res) => {
     // Find donation by ID and dealer match
     const donation = await Donation.findOne({ _id: id, dealer: userId })
       .populate("donor", "firstName lastName email phone")
-      .populate("dealer", "firstName email");
+      .populate("dealer", "firstName email profileImage");
 
     if (!donation) {
       return res
@@ -1487,8 +1487,8 @@ const getHistory = async (req, res) => {
       status: donatedStatus,
       dealer: userId,
     })
-      .populate("donor", "firstName lastName email")
-      .populate("recycler", "firstName lastName email");
+      .populate("donor", "firstName lastName email profileImage")
+      .populate("recycler", "firstName lastName email profileImage");
 
     return res.status(200).json({
       success: true,
@@ -1654,7 +1654,7 @@ const getGaudaanByUserId = async (req, res) => {
     }
 
     const records = await Gaudaan.find({ donor: userId })
-      .populate("assignedVolunteer", "firstName lastName phone")
+      .populate("assignedVolunteer", "firstName lastName phone profileImage")
       .populate("shelterId", "name address phone")
       .sort({ createdAt: -1 });
 
@@ -1691,7 +1691,7 @@ const getAssignedGaudaan = async (req, res) => {
       assignedVolunteer: volunteerId,
     })
       .populate("assignedVolunteer", "firstName lastName email")
-      .populate("donor", "firstName lastName phone");
+      .populate("donor", "firstName lastName phone profileImage");
 
     res.status(200).json({
       success: true,
@@ -1793,7 +1793,11 @@ const updategaudaanStatus = async (req, res) => {
 // Rycycaler
 const getRecyclers = async (req, res) => {
   try {
+    const roles = req.user.roles;
     const recyclers = await User.find({ roles: "recycler" });
+      if (!req.user || !roles.some(role => req.user.roles.includes("dealer"))) {
+      return res.status(403).json({ success: false, message: `Access denied for role(s): ${req.user?.roles?.join(", ")}` });
+    }
     res.status(200).json({ success: true, recyclers });
   } catch (error) {
     console.error("Error fetching recyclers:", error);

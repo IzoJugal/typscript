@@ -21,7 +21,6 @@ conn.once("open", () => {
   });
 });
 
-
 const getAdmin = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -46,7 +45,7 @@ const getAdmin = async (req, res) => {
       message: "Admin fetched successfully",
       admin: {
         id: admin._id,
-        name: admin.firstName,
+        name: `${admin.firstName || ""} ${admin.lastName || ""}`.trim(),
         email: admin.email,
         roles: admin.roles,
       },
@@ -163,7 +162,9 @@ const getAdminProfileImage = async (req, res) => {
       throw new Error("GridFS is not initialized");
     }
     const filename = req.params.filename;
-    const file = await conn.db.collection("uploads.files").findOne({ filename });
+    const file = await conn.db
+      .collection("uploads.files")
+      .findOne({ filename });
 
     if (!file) {
       return res.status(404).json({ message: "File not found" });
@@ -576,13 +577,11 @@ const rejectDonation = async (req, res) => {
 
     await donation.save();
     console.log({ message: "Donation rejected and cancelled", donation });
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "Donation rejected and cancelled",
-        donation,
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Donation rejected and cancelled",
+      donation,
+    });
   } catch (err) {
     console.error("Error rejecting donation:", err);
     return res
@@ -1165,13 +1164,11 @@ const deleteAccount = async (req, res) => {
       .json({ success: true, message: "Account deleted successfully" });
   } catch (error) {
     console.error("Error deleting account:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server error while deleting account",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Server error while deleting account",
+      error: error.message,
+    });
   }
 };
 
@@ -1189,25 +1186,21 @@ const sliderImage = async (req, res) => {
 
     const slider = new Slider({ images });
     await slider.save();
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "Slider created successfully",
-        data: slider,
-      });
+    res.status(201).json({
+      success: true,
+      message: "Slider created successfully",
+      data: slider,
+    });
   } catch (error) {
     console.error("Error in sliderImage:", {
       message: error.message,
       stack: error.stack,
     });
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error uploading images",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error uploading images",
+      error: error.message,
+    });
   }
 };
 
@@ -1224,13 +1217,11 @@ const getSliders = async (req, res) => {
       message: error.message,
       stack: error.stack,
     });
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching sliders",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching sliders",
+      error: error.message,
+    });
   }
 };
 
@@ -1261,34 +1252,28 @@ const uploadLogo = async (req, res) => {
       .json({ success: true, message: "Logo uploaded", data: newLogo });
   } catch (err) {
     console.error("Upload failed:", err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Logo upload failed",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Logo upload failed",
+      error: err.message,
+    });
   }
 };
 
 const logoGet = async (req, res) => {
   try {
     const logo = await Logo.findOne().sort({ createdAt: -1 });
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Logo fetched successfully",
-        data: logo || null,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Logo fetched successfully",
+      data: logo || null,
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching logo",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching logo",
+      error: err.message,
+    });
   }
 };
 
@@ -1317,22 +1302,18 @@ const saveImpacts = async (req, res) => {
       );
     }
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Impact counts updated successfully",
-        data: updates,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Impact counts updated successfully",
+      data: updates,
+    });
   } catch (error) {
     console.error("Error updating impact counts:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
 
@@ -1340,21 +1321,17 @@ const saveImpacts = async (req, res) => {
 const getImpacts = async (req, res) => {
   try {
     const impacts = await Impact.find();
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Impacts fetched successfully",
-        data: impacts,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Impacts fetched successfully",
+      data: impacts,
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch impacts",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch impacts",
+      error: err.message,
+    });
   }
 };
 
@@ -1367,13 +1344,11 @@ const createShelter = async (req, res) => {
       .json({ success: true, message: "Shelter created", shelter: saved });
   } catch (err) {
     console.error("Shelter create error:", err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error creating shelter",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error creating shelter",
+      error: err.message,
+    });
   }
 };
 
@@ -1382,13 +1357,11 @@ const getAllShelters = async (req, res) => {
     const shelters = await Shelter.find().sort({ createdAt: -1 });
     res.status(200).json({ success: true, count: shelters.length, shelters });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching shelters",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching shelters",
+      error: err.message,
+    });
   }
 };
 
@@ -1409,17 +1382,15 @@ const getGaudaanSubmissions = async (req, res) => {
     }
 
     const data = await Gaudaan.find()
-    .populate("assignedVolunteer", "firstName lastName phone")
-    .populate("shelterId", "name address phone")
-    .sort({ createdAt: -1 }); 
-    
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Gaudaan submissions fetched successfully",
-        data,
-      });
+      .populate("assignedVolunteer", "firstName lastName phone")
+      .populate("shelterId", "name address phone")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Gaudaan submissions fetched successfully",
+      data,
+    });
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -1464,22 +1435,18 @@ const assignVolunteer = async (req, res) => {
       { new: true }
     ).populate("assignedVolunteer", "firstName lastName email");
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Volunteer assigned successfully",
-        gaudaan: updated,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Volunteer assigned successfully",
+      gaudaan: updated,
+    });
   } catch (error) {
     console.error("Error assigning volunteer:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Assignment failed",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Assignment failed",
+      error: error.message,
+    });
   }
 };
 

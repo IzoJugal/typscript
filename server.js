@@ -7,7 +7,6 @@ const connectDB = require("./config/Database");
 
 const authRoute = require("./route/AuthRoute");
 const adminRoute = require("./route/AdminRoute");
-const gaudaanRoute = require("./route/GaudaanRoute");
 const contactRoute = require("./route/ContactRouter");
 
 const app = express();
@@ -41,7 +40,6 @@ connectDB()
     // 🔁 Define Routes
     app.use("/auth", authRoute);
     app.use("/admin", adminRoute);
-    app.use("/donation", gaudaanRoute);
     app.use("/contact", contactRoute);
 
     // 🧪 Root Health Check
