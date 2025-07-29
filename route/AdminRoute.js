@@ -40,7 +40,7 @@ router.route("/profile").get(adminMiddleware, controller.getAdminProfile);
 
 router.route("/profile").patch(adminMiddleware, uploadMultiple, controller.updateAdminProfile);
 
-router.route("/profile/image/:filename").get(adminMiddleware, controller.getAdminProfileImage)
+router.route("/profile/image/:filename").get( controller.getAdminProfileImage)
 
 router.route("/password").patch(adminMiddleware, controller.changePassword);
 
