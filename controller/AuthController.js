@@ -990,30 +990,6 @@ const updateDonation = async (req, res) => {
       return res.status(404).json({ error: "Donation not found" });
     }
 
-     // 🔔 Notification Logic
-    const io = getIO();
-    const message = `Donation ${donation._id} has been updated.`;
-
-    const admins = await User.find({ roles: "admin" }, "_id");
-
-    const notifyUsers = [...admins.map((a) => a._id.toString()), donation.donor._id.toString()];
-
-    // 📬 Create and emit notifications
-    await Promise.all(
-      notifyUsers.map(async (userId) => {
-        const notif = await Notification.create({
-          userId,
-          message,
-          type: "donation-update",
-        });
-
-        io.to(userId).emit("newNotification", {
-          message: notif.message,
-          notificationId: notif._id,
-        });
-      })
-    );
-
     res.status(200).json({
       success: true,
       message: "Donation updated successfully",
@@ -1278,7 +1254,6 @@ const updateTaskStatus = async (req, res) => {
 
     await task.save();
 
-    
     // ✅ Notify all admins
     const admins = await User.find({ roles: "admin" }, "_id");
     const adminIds = admins.map((a) => a._id.toString());
@@ -1301,7 +1276,7 @@ const updateTaskStatus = async (req, res) => {
         notificationId: createdNotifications[index]._id,
       });
     });
-    
+
     res
       .status(200)
       .json({ success: true, message: "Task status updated", task });
@@ -1503,6 +1478,27 @@ const updateDonationStatus = async (req, res) => {
 
     await donation.save();
 
+    // 🔔 Notify Donor
+    const io = getIO();
+    const donorId = donation.donor?._id?.toString();
+
+    if (donorId) {
+      const message = `Your donation has been marked as '${status}' by dealer ${
+        donation.dealer?.firstName || "Dealer"
+      }.`;
+
+      const notification = await Notification.create({
+        userId: donorId,
+        message,
+        type: "donation-status",
+      });
+
+      io.to(donorId).emit("newNotification", {
+        message: notification.message,
+        notificationId: notification._id,
+      });
+    }
+
     return res.status(200).json({
       success: true,
       message: "Donation status updated by dealer",
@@ -1562,11 +1558,30 @@ const addPriceandweight = async (req, res) => {
 
     await donation.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Donation updated successfully",
-      donation,
-    });
+    const donorId = donation.donor?._id?.toString();
+    if (donorId) {
+      const message = `Dealer ${
+        donation.dealer?.firstName || "Dealer"
+      } updated your donation with price ₹${price} and weight ${weight}kg.`;
+
+      const notification = await Notification.create({
+        userId: donorId,
+        message,
+        type: "donation-update",
+      });
+
+      const io = getIO();
+      io.to(donorId).emit("newNotification", {
+        message: notification.message,
+        notificationId: notification._id,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Donation updated successfully",
+        donation,
+      });
+    }
   } catch (err) {
     console.error("Update error:", err);
     return res
