@@ -753,9 +753,17 @@ const createDonation = async (req, res) => {
     }
 
     // 🟢 Validate required fields early
-    const requiredFields = [scrapType, phone, description, pickupDate, pickupTime];
+    const requiredFields = [
+      scrapType,
+      phone,
+      description,
+      pickupDate,
+      pickupTime,
+    ];
     if (requiredFields.some((field) => !field)) {
-      return res.status(400).json({ message: "Missing required donation fields" });
+      return res
+        .status(400)
+        .json({ message: "Missing required donation fields" });
     }
 
     // 🟡 Convert pincode to number safely
@@ -767,7 +775,9 @@ const createDonation = async (req, res) => {
     // 📤 Handle uploaded image files (from memoryStorage + GridFS)
     let uploadedImages = [];
     if (req.files?.images) {
-      const files = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+      const files = Array.isArray(req.files.images)
+        ? req.files.images
+        : [req.files.images];
 
       for (const file of files) {
         const stream = Readable.from(file.buffer);
@@ -796,15 +806,18 @@ const createDonation = async (req, res) => {
     let urlImages = [];
     if (req.body.images) {
       try {
-        const parsed = typeof req.body.images === "string"
-          ? JSON.parse(req.body.images)
-          : req.body.images;
+        const parsed =
+          typeof req.body.images === "string"
+            ? JSON.parse(req.body.images)
+            : req.body.images;
 
         if (Array.isArray(parsed)) {
           urlImages = parsed.filter((img) => img?.url);
         }
       } catch (err) {
-        return res.status(400).json({ message: "Invalid images format in body" });
+        return res
+          .status(400)
+          .json({ message: "Invalid images format in body" });
       }
     }
 
@@ -1641,9 +1654,28 @@ const gaudaanForm = async (req, res) => {
         .json({ message: "Animal Registered ID cannot be empty if provided" });
     }
 
-    const images = req.files
-      ? req.files.map((file) => `/uploads/${file.filename}`)
-      : [];
+    const images = [];
+
+    if (req.files) {
+      for (const file of req.files) {
+        const stream = Readable.from(file.buffer);
+        const filename = `${Date.now()}-${file.originalname}`;
+
+        const uploadStream = gfs.openUploadStream(filename, {
+          contentType: file.mimetype,
+        });
+
+        await new Promise((resolve, reject) => {
+          stream
+            .pipe(uploadStream)
+            .on("finish", () => {
+              images.push({ url: `/file/${uploadStream.id}` }); // This is what you save
+              resolve();
+            })
+            .on("error", reject);
+        });
+      }
+    }
 
     const gaudaan = new Gaudaan({
       name,
