@@ -12,6 +12,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const { log } = require("console");
+const { Readable } = require("stream");
 
 let gfs;
 const conn = mongoose.connection;
@@ -327,8 +328,6 @@ const signInAuth = async (req, res) => {
       token,
       user: {
         id: user._id, // Or `_id: user._id` to match frontend
-        name: user.firstName,
-        email: user.email,
         roles: user.roles || "user", // Ensure role is included
         roles: user.roles || [user.roles || "user"], // Include roles array for frontend
       },
@@ -745,67 +744,77 @@ const createDonation = async (req, res) => {
       country,
       pickupDate,
       pickupTime,
-      images: bodyImages, // this might be JSON string or array
+      images: bodyImages, // JSON string or array
     } = req.body;
 
-    const donor = req.user.userId;
+    const donor = req.user?.userId;
+    if (!donor) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
+    // 🟢 Validate required fields early
+    const requiredFields = [scrapType, phone, description, pickupDate, pickupTime];
+    if (requiredFields.some((field) => !field)) {
+      return res.status(400).json({ message: "Missing required donation fields" });
+    }
+
+    // 🟡 Convert pincode to number safely
+    const pin = Number(pincode);
+    if (isNaN(pin)) {
+      return res.status(400).json({ message: "Invalid pincode" });
+    }
+
+    // 📤 Handle uploaded image files (from memoryStorage + GridFS)
     let uploadedImages = [];
+    if (req.files?.images) {
+      const files = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
 
-// 1️⃣ Handle file uploads (from multipart/form-data)
-if (req.files?.images) {
-  const files = Array.isArray(req.files.images)
-    ? req.files.images
-    : [req.files.images];
+      for (const file of files) {
+        const stream = Readable.from(file.buffer);
+        const filename = `${Date.now()}-${file.originalname}`;
 
-  uploadedImages = files
-    .map((file) => {
-      // 👇 Confirm where the actual URL/identifier is
-      const url = file.path || file.location || `/uploads/${file.filename}` || "";
-      return url ? { url } : null;
-    })
-    .filter(Boolean); // Removes nulls
-}
+        const uploadStream = gfs.openUploadStream(filename, {
+          contentType: file.mimetype,
+        });
 
-// 2️⃣ Handle URL-based images from body
-let urlImages = [];
-if (req.body.images) {
-  try {
-    const parsed =
-      typeof req.body.images === "string"
-        ? JSON.parse(req.body.images)
-        : req.body.images;
-
-    if (Array.isArray(parsed)) {
-      // only include images with url
-      urlImages = parsed.filter((img) => img?.url);
-    }
-  } catch (err) {
-    return res.status(400).json({ message: "Invalid images format in body" });
-  }
-}
-
-// 3️⃣ Combine both sources
-const images = [...uploadedImages, ...urlImages];
-
-// 4️⃣ Final check
-if (images.length === 0) {
-  return res.status(400).json({ message: "No valid images provided." });
-}
-
-    if (
-      !scrapType ||
-      !phone ||
-      !description ||
-      !pickupDate ||
-      !pickupTime ||
-      images.length === 0
-    ) {
-      return res.status(400).json({
-        message: "Missing required fields or no images provided",
-      });
+        await new Promise((resolve, reject) => {
+          stream
+            .pipe(uploadStream)
+            .on("finish", () => {
+              uploadedImages.push({ url: `/file/${uploadStream.id}` });
+              resolve();
+            })
+            .on("error", (err) => {
+              console.error("GridFS upload error:", err);
+              reject(err);
+            });
+        });
+      }
     }
 
+    // 🌐 Handle image URLs from body
+    let urlImages = [];
+    if (req.body.images) {
+      try {
+        const parsed = typeof req.body.images === "string"
+          ? JSON.parse(req.body.images)
+          : req.body.images;
+
+        if (Array.isArray(parsed)) {
+          urlImages = parsed.filter((img) => img?.url);
+        }
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid images format in body" });
+      }
+    }
+
+    // 🧩 Combine both image sources
+    const images = [...uploadedImages, ...urlImages];
+    if (images.length === 0) {
+      return res.status(400).json({ message: "No valid images provided." });
+    }
+
+    // 📝 Create donation
     const donation = await Donation.create({
       donor,
       scrapType,
@@ -813,7 +822,7 @@ if (images.length === 0) {
       description,
       addressLine1,
       addressLine2,
-      pincode,
+      pincode: pin,
       city,
       country,
       pickupDate,
@@ -834,10 +843,24 @@ if (images.length === 0) {
       donation,
     });
   } catch (error) {
-    console.error("Create Donation Error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Server error", error: error.message });
+    console.error("❌ Create Donation Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+const getDonationImage = async (req, res) => {
+  try {
+    const fileId = new mongoose.Types.ObjectId(req.params.id);
+    const stream = gfs.openDownloadStream(fileId);
+
+    stream.on("error", () => res.status(404).send("File not found"));
+    stream.pipe(res);
+  } catch (err) {
+    res.status(500).send("Error retrieving file");
   }
 };
 
@@ -1990,6 +2013,7 @@ module.exports = {
   getTotalScrapedWeight,
   getImpacts,
   createDonation,
+  getDonationImage,
   getDonations,
   getDonationById,
   updateDonation,

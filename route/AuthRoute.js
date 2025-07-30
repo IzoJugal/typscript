@@ -7,10 +7,6 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-const uploadPath = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadPath)) {
-  fs.mkdirSync(uploadPath);
-}
 
 // Initialize GridFS
 let gfs;
@@ -73,6 +69,8 @@ router.route("/impacts").get( controller.getImpacts);
 
 //Donations
 router.route("/donate").post(authMiddleware, uploadMultiple, controller.createDonation);
+
+router.route("/file/:id").get( controller.getDonationImage);
 
 router.route("/donation").get(authMiddleware, controller.getDonations);
 
