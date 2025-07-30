@@ -990,6 +990,30 @@ const updateDonation = async (req, res) => {
       return res.status(404).json({ error: "Donation not found" });
     }
 
+     // 🔔 Notification Logic
+    const io = getIO();
+    const message = `Donation ${donation._id} has been updated.`;
+
+    const admins = await User.find({ roles: "admin" }, "_id");
+
+    const notifyUsers = [...admins.map((a) => a._id.toString()), donation.donor._id.toString()];
+
+    // 📬 Create and emit notifications
+    await Promise.all(
+      notifyUsers.map(async (userId) => {
+        const notif = await Notification.create({
+          userId,
+          message,
+          type: "donation-update",
+        });
+
+        io.to(userId).emit("newNotification", {
+          message: notif.message,
+          notificationId: notif._id,
+        });
+      })
+    );
+
     res.status(200).json({
       success: true,
       message: "Donation updated successfully",
