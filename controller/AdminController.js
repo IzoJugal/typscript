@@ -1431,7 +1431,7 @@ const assignVolunteer = async (req, res) => {
 
     const updated = await Gaudaan.findByIdAndUpdate(
       gaudaanId,
-      { assignedVolunteer: volunteerId },
+      { assignedVolunteer: volunteerId,status:"assigned" },
       { new: true }
     ).populate("assignedVolunteer", "firstName lastName email");
 
