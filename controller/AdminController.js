@@ -12,6 +12,8 @@ const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const path = require("path");
+const Notification = require("../Model/NotificationsModel");
+const { getIO } = require("../config/socket");
 
 let gfs;
 const conn = mongoose.connection;
@@ -20,6 +22,26 @@ conn.once("open", () => {
     bucketName: "uploads",
   });
 });
+
+const formatDateTime = (date, time) => {
+  const d = new Date(date);
+  const day = d.getDate().toString().padStart(2, "0");
+  const month = d.toLocaleString("en-US", { month: "short" });
+  const year = d.getFullYear();
+
+  // Format time (already in "HH:MM AM/PM" or "HH:MM")
+  let formattedTime = time;
+  if (!/[ap]m/i.test(time)) {
+    // Convert 24hr time to AM/PM
+    const [h, m] = time.split(":");
+    const hour = parseInt(h, 10);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour % 12 || 12;
+    formattedTime = `${hour12}:${m} ${ampm}`;
+  }
+
+  return `${day}-${month}-${year} at ${formattedTime}`;
+};
 
 const getAdmin = async (req, res) => {
   try {
@@ -545,6 +567,23 @@ const assignDealer = async (req, res) => {
     await donation.save();
 
     await donation.populate("dealer", "firstName lastName email");
+    const formattedDateTime = formatDateTime(
+      donation.pickupDate,
+      donation.pickupTime
+    );
+
+    const message = `A new donation has been assigned to you. Pickup scheduled for ${formattedDateTime}.`;
+    const notification = await Notification.create({
+      userId: resolvedDealerId,
+      message,
+    });
+
+    // ✅ Emit Real-Time Notification to Dealer
+    const io = getIO();
+    io.to(resolvedDealerId.toString()).emit("newNotification", {
+      message,
+      notificationId: notification._id,
+    });
 
     res.status(200).json({
       success: true,
@@ -576,7 +615,25 @@ const rejectDonation = async (req, res) => {
     }
 
     await donation.save();
-    console.log({ message: "Donation rejected and cancelled", donation });
+
+    // ✅ Send notification to donor
+    const donorId = donation.donor?._id;
+    const message = `Your donation "${donation.scrapType}" has been rejected.`;
+
+    const notification = await Notification.create({
+      userId: donorId,
+      message,
+    });
+
+    // ✅ Emit socket notification
+    const io = getIO();
+    if (donorId) {
+      io.to(donorId.toString()).emit("newNotification", {
+        message,
+        notificationId: notification._id,
+      });
+    }
+
     return res.status(200).json({
       success: true,
       message: "Donation rejected and cancelled",
@@ -705,6 +762,19 @@ const createVolunteerTask = async (req, res) => {
     });
 
     await newTask.save();
+
+    // ✅ Create Notification
+    const notification = await Notification.create({
+      userId: volunteer,
+      message: `You have been assigned a new task: ${taskTitle}`,
+    });
+
+    // ✅ Emit Notification via Socket.IO
+    const io = getIO(); // Get socket instance
+    io.to(volunteer.toString()).emit("newNotification", {
+      message: notification.message,
+      notificationId: notification._id,
+    });
 
     return res.status(201).json({
       success: true,
@@ -1431,9 +1501,22 @@ const assignVolunteer = async (req, res) => {
 
     const updated = await Gaudaan.findByIdAndUpdate(
       gaudaanId,
-      { assignedVolunteer: volunteerId,status:"assigned" },
+      { assignedVolunteer: volunteerId, status: "assigned" },
       { new: true }
     ).populate("assignedVolunteer", "firstName lastName email");
+
+    const message = `You've been assigned to a Gaudaan pickup: ${updated.animalType}`;
+    const notification = await Notification.create({
+      userId: volunteerId,
+      message,
+    });
+
+    // ✅ Emit notification via Socket.IO
+    const io = getIO();
+    io.to(volunteerId.toString()).emit("newNotification", {
+      message,
+      notificationId: notification._id,
+    });
 
     res.status(200).json({
       success: true,

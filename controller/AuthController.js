@@ -13,6 +13,8 @@ const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const { log } = require("console");
 const { Readable } = require("stream");
+const { getIO } = require("../config/socket");
+const Notification = require("../Model/NotificationsModel");
 
 let gfs;
 const conn = mongoose.connection;
@@ -850,6 +852,25 @@ const createDonation = async (req, res) => {
       ],
     });
 
+    // ✅ Notify all admins
+    const admins = await User.find({ roles: "admin" }, "_id");
+    const adminIds = admins.map((a) => a._id.toString());
+    const message = `New donation created: ${scrapType}`;
+
+    const notificationPromises = adminIds.map((adminId) =>
+      Notification.create({ userId: adminId, message })
+    );
+    const createdNotifications = await Promise.all(notificationPromises);
+
+    // ✅ Emit via Socket.IO to all admins
+    const io = getIO();
+    adminIds.forEach((adminId, index) => {
+      io.to(adminId).emit("newNotification", {
+        message,
+        notificationId: createdNotifications[index]._id,
+      });
+    });
+
     return res.status(200).json({
       success: true,
       message: "Donation created successfully",
@@ -1232,6 +1253,31 @@ const updateTaskStatus = async (req, res) => {
     }
 
     await task.save();
+
+    
+    // ✅ Notify all admins
+    const admins = await User.find({ roles: "admin" }, "_id");
+    const adminIds = admins.map((a) => a._id.toString());
+    const message = `Task "${task.taskTitle}" was marked ${newStatus} by volunteer`;
+
+    const createdNotifications = await Promise.all(
+      adminIds.map((adminId) =>
+        Notification.create({
+          userId: adminId,
+          message,
+        })
+      )
+    );
+
+    // ✅ Emit real-time notification
+    const io = getIO();
+    adminIds.forEach((adminId, index) => {
+      io.to(adminId).emit("newNotification", {
+        message,
+        notificationId: createdNotifications[index]._id,
+      });
+    });
+    
     res
       .status(200)
       .json({ success: true, message: "Task status updated", task });

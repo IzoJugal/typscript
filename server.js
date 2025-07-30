@@ -8,6 +8,7 @@ const connectDB = require("./config/Database");
 const authRoute = require("./route/AuthRoute");
 const adminRoute = require("./route/AdminRoute");
 const contactRoute = require("./route/ContactRouter");
+const http = require("http");
 
 const app = express();
 
@@ -19,19 +20,21 @@ const corsOptions = {
   credentials: true,
 };
 
+const PORT = 5000;
+
+const server = http.createServer(app);
+const socket = require("./config/socket");
+socket.init(server);
+server.listen(PORT);
+
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 🗂️ Serve static uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-console.log("Static files served from:", path.join(__dirname, "uploads"));
-
 
 app.use("/uploads", express.static("uploads"));
-
-// 🌐 Connect to MongoDB and start server
-const PORT = 5000;
 
 connectDB()
   .then(() => {
@@ -41,6 +44,7 @@ connectDB()
     app.use("/auth", authRoute);
     app.use("/admin", adminRoute);
     app.use("/contact", contactRoute);
+    app.use("/notifications", require("./route/NotificationRoute"));
 
     // 🧪 Root Health Check
     app.get("/", (req, res) => {
