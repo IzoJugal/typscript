@@ -912,7 +912,7 @@ const getDonations = async (req, res) => {
     // 🔄 Route for 'user' to fetch their own donations
     if (userRoles.includes("user")) {
       const donations = await Donation.find({ donor: userId })
-        .populate("dealer", "firstName lastName email phone")
+        .populate("dealer", "firstName lastName email phone profileImage")
         .sort({
           createdAt: -1,
         });

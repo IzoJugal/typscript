@@ -456,6 +456,63 @@ const getPendingDonations = async (req, res) => {
   }
 };
 
+const getDonationById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const donation = await Donation.findById(id)
+      .populate("dealer", "firstName lastName email phone profileImage") 
+      .populate("donor", "firstName lastName email phone profileImage") 
+      .exec();
+
+    if (!donation) {
+      return res.status(404).json({
+        success: false,
+        message: "Donation not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Donation fetched successfully",
+      donation,
+    });
+  } catch (err) {
+    console.error("Error fetching donation by ID:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching donation",
+      error: err.message,
+    });
+  }
+};
+
+const getActiveDonations = async (req, res) => {
+  try {
+    // Fetch donations where status is NOT 'donated' or 'cancelled'
+    const donations = await Donation.find({
+      status: { $nin: ['donated', 'cancelled'] }
+    })
+      .populate('donor',"firstName lastName phone profileImage")
+      .populate('dealer',"firstName lastName phone profileImage")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Active donations fetched successfully',
+      count: donations.length,
+      donations,
+    });
+  } catch (error) {
+    console.error('Error fetching active donations:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching donations',
+      error: error.message,
+    });
+  }
+};
+
 //History data
 const getHistory = async (req, res) => {
   try {
@@ -572,17 +629,31 @@ const assignDealer = async (req, res) => {
       donation.pickupTime
     );
 
-    const message = `A new donation has been assigned to you. Pickup scheduled for ${formattedDateTime}.`;
-    const notification = await Notification.create({
+  const dealerMessage = `A new donation has been assigned to you. Pickup scheduled for ${formattedDateTime}.`;
+    const donorMessage = `Your donation has been assigned to ${dealer.firstName} ${dealer.lastName}. Status: ${finalStatus}.`;
+
+    // Notify Dealer
+    const dealerNotification = await Notification.create({
       userId: resolvedDealerId,
-      message,
+      message: dealerMessage,
     });
 
-    // ✅ Emit Real-Time Notification to Dealer
+    // Notify Donor
+    const donorNotification = await Notification.create({
+      userId: donation.donor._id,
+      message: donorMessage,
+    });
+
+    // Emit Socket Events
     const io = getIO();
     io.to(resolvedDealerId.toString()).emit("newNotification", {
-      message,
-      notificationId: notification._id,
+      message: dealerMessage,
+      notificationId: dealerNotification._id,
+    });
+
+    io.to(donation.donor._id.toString()).emit("newNotification", {
+      message: donorMessage,
+      notificationId: donorNotification._id,
     });
 
     res.status(200).json({
@@ -1546,6 +1617,8 @@ module.exports = {
   getDealersCounts,
   getVolunteerCounts,
   getPendingDonations,
+  getDonationById,
+  getActiveDonations,
   getHistory,
   getDealers,
   assignDealer,

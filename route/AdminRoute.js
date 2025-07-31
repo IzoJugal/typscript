@@ -59,6 +59,11 @@ router.route("/activeVolunteers").get(adminMiddleware, controller.getVolunteerCo
 
 router.route("/pendingDonation").get(adminMiddleware, controller.getPendingDonations);
 
+router.route("/pickups/:id").get(adminMiddleware, controller.getDonationById);
+
+router.route("/activedonations").get(adminMiddleware, controller.getActiveDonations)
+
+
 //History Data
 router.route("/history").get(adminMiddleware, controller.getHistory);
 
