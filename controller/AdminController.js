@@ -781,12 +781,14 @@ const createVolunteerTask = async (req, res) => {
       !description ||
       !date ||
       !time ||
-      !volunteer
+      !volunteer ||
+      !Array.isArray(volunteer) ||
+      volunteer.length === 0
     ) {
       return res.status(400).json({
         success: false,
         message:
-          "taskTitle, taskType, description, date, and time volunteer are required.",
+          "taskTitle, taskType, description, date, time, and at least one volunteer are required.",
       });
     }
 
@@ -795,7 +797,7 @@ const createVolunteerTask = async (req, res) => {
     if (isNaN(parsedDate.getTime())) {
       return res.status(400).json({
         success: false,
-        message: "Invalid date format. Please use a valid date.",
+        message: "Invalid date format. Please use a valid date (YYYY-MM-DD).",
       });
     }
 
@@ -814,11 +816,27 @@ const createVolunteerTask = async (req, res) => {
     if (!timeRegex.test(time)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid time format. Use HH:MM AM/PM or 24hr format.",
+        message: "Invalid time format. Use HH:MM AM/PM or 24hr format (HH:MM).",
       });
     }
 
-    const normalizedStatus = status?.toLowerCase();
+    // Validate volunteer IDs and roles
+    const validVolunteers = await User.find({
+      _id: { $in: volunteer },
+      $or: [
+        { roles: "volunteer" }, // Single role: "volunteer"
+        { roles: { $all: ["user", "volunteer"] } }, // Array of roles including both "user" and "volunteer"
+      ],
+    }).select("_id");
+    const validVolunteerIds = validVolunteers.map((vol) => vol._id.toString());
+    if (validVolunteerIds.length !== volunteer.length) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more volunteer IDs are invalid or do not have the required roles.",
+      });
+    }
+
+    const normalizedStatus = status?.toLowerCase() || "pending"; // Default status if not provided
 
     // Create task
     const newTask = new Task({
@@ -827,24 +845,37 @@ const createVolunteerTask = async (req, res) => {
       description,
       date: parsedDate,
       time,
-      volunteer,
+      volunteer, // Store as array of volunteer IDs
       address,
       status: normalizedStatus,
     });
 
     await newTask.save();
 
-    // ✅ Create Notification
-    const notification = await Notification.create({
-      userId: volunteer,
-      message: `You have been assigned a new task: ${taskTitle}`,
-    });
+    // Create notifications for each volunteer
+    const Notification = mongoose.model("Notification"); // Ensure Notification model is referenced
+    const notifications = await Promise.all(
+      volunteer.map(async (volunteerId) => {
+        const notification = await Notification.create({
+          userId: volunteerId,
+          message: `You have been assigned a new task: ${taskTitle}`,
+        });
+        return notification;
+      })
+    );
 
-    // ✅ Emit Notification via Socket.IO
+    // Emit notifications via Socket.IO for each volunteer
     const io = getIO(); // Get socket instance
-    io.to(volunteer.toString()).emit("newNotification", {
-      message: notification.message,
-      notificationId: notification._id,
+    volunteer.forEach((volunteerId) => {
+      const notification = notifications.find(
+        (notif) => notif.userId.toString() === volunteerId
+      );
+      if (notification) {
+        io.to(volunteerId.toString()).emit("newNotification", {
+          message: notification.message,
+          notificationId: notification._id,
+        });
+      }
     });
 
     return res.status(201).json({
@@ -1604,6 +1635,56 @@ const assignVolunteer = async (req, res) => {
   }
 };
 
+const rejectGaudaan = async (req, res) => {
+  try {
+    const { gaudaanId } = req.params;
+    const { reason } = req.body;
+
+    if (!gaudaanId) {
+      return res.status(400).json({ message: "Gaudaan ID is required" });
+    }
+
+    const updated = await Gaudaan.findByIdAndUpdate(
+      gaudaanId,
+      {
+        status: "rejected",
+        rejectionReason: reason || "No reason provided",
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Gaudaan not found" });
+    }
+
+    // Optional: Notify user
+    const message = `Your Gaudaan request has been rejected. ${reason ? "Reason: " + reason : ""}`;
+    await Notification.create({
+      userId: updated.donor,
+      message,
+    });
+
+    const io = getIO();
+    io.to(updated.donor.toString()).emit("newNotification", {
+      message,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Gaudaan rejected successfully",
+      gaudaan: updated,
+    });
+  } catch (error) {
+    console.error("Error rejecting Gaudaan:", error);
+    res.status(500).json({
+      success: false,
+      message: "Rejection failed",
+      error: error.message,
+    });
+  }
+};
+
+
 module.exports = {
   getAdmin,
   getAdminProfile,
@@ -1649,4 +1730,5 @@ module.exports = {
   getGaudaanSubmissions,
   getVolunteerUsers,
   assignVolunteer,
+  rejectGaudaan,
 };

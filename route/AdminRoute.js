@@ -134,4 +134,7 @@ router.route("/uvolunteer").get(adminMiddleware, controller.getVolunteerUsers);
 
 router.route("/assignVolunteer/:gaudaanId").patch(adminMiddleware, controller.assignVolunteer);
 
+router.patch("/reject/:gaudaanId", adminMiddleware, controller.rejectGaudaan);
+
+
 module.exports = router;

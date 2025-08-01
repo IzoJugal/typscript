@@ -35,11 +35,11 @@ const volunteerTaskSchema = new mongoose.Schema(
         message: (props) => `${props.value} is not a valid time format!`,
       },
     },
-    volunteer: {
+    volunteer:[ {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // assuming volunteer is a user
+      ref: "User", 
       required: false,
-    },
+    }],
     address: { type: String, trim: true },
     status: {
       type: String,

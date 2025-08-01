@@ -59,6 +59,10 @@ const gaudaanSchema = new mongoose.Schema(
       ],
       default: "unassigned",
     },
+    rejectionReason: {
+      type: String,
+      default: "",
+    },
     statusHistory: [
       {
         status: {
