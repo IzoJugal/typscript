@@ -146,5 +146,9 @@ router.route("/assignVolunteer/:gaudaanId").patch(adminMiddleware, controller.as
 
 router.patch("/reject/:gaudaanId", adminMiddleware, controller.rejectGaudaan);
 
+//Contacts
+router.get("/contacts", adminMiddleware, controller.getContacts);
+router.delete("/contact/:id", adminMiddleware, controller.deleteContact);
+
 
 module.exports = router;

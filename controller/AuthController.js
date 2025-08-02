@@ -614,6 +614,23 @@ const assignVolunteerRole = async (req, res) => {
       await user.save();
     }
 
+     // 🔔 Notify all admins
+      const admins = await User.find({ roles: "admin" });
+      const notifications = admins.map((admin) => ({
+        user: admin._id,
+        type: "volunteer",
+        title: "New Volunteer Assigned",
+        message: `${user.firstName || "A user"} is now a volunteer.`,
+      }));
+      await Notification.insertMany(notifications);
+
+      // Optional: Emit socket.io event
+      io.to(admin._id.toString()).emit("notification", {
+        title: "New Volunteer Assigned",
+        message: `${user.firstName} is now a volunteer.`,
+      });
+    
+
     res
       .status(200)
       .json({ success: true, message: "Volunteer role assigned", user });
@@ -1228,6 +1245,30 @@ const updateTaskStatus = async (req, res) => {
       });
     }
 
+       const volunteer = updatedTask.volunteers.find(
+      (v) => v.user && v.user._id.toString() === userId
+    );
+    const volunteerName = volunteer?.user?.firstName || "A volunteer";
+
+    const admins = await User.find({ roles: "admin" });
+
+    const notifications = admins.map((admin) => ({
+      user: admin._id,
+      type: "volunteer-task",
+      title: `Task ${statusToUpdate}`,
+      message: `${volunteerName} has ${statusToUpdate} a task.`,
+    }));
+
+    await Notification.insertMany(notifications);
+
+    // Optional: Emit real-time via socket.io
+    admins.forEach((admin) => {
+      io.to(admin._id.toString()).emit("notification", {
+        title: `Task ${statusToUpdate}`,
+        message: `${volunteerName} has ${statusToUpdate} a task.`,
+      });
+    });
+
     return res.status(200).json({
       success: true,
       message: `Task ${action}ed successfully.`,
@@ -1434,20 +1475,35 @@ const updateDonationStatus = async (req, res) => {
 
     // 🔔 Notify Donor
     const io = getIO();
+
+    // 🔔 Notify Donor
     const donorId = donation.donor?._id?.toString();
+    const dealerName = donation.dealer?.firstName || "Dealer";
 
     if (donorId) {
-      const message = `Your donation has been marked as '${status}' by dealer ${
-        donation.dealer?.firstName || "Dealer"
-      }.`;
-
+      const message = `Your donation has been marked as '${status}' by dealer ${dealerName}.`;
       const notification = await Notification.create({
         userId: donorId,
         message,
         type: "donation-status",
       });
-
       io.to(donorId).emit("newNotification", {
+        message: notification.message,
+        notificationId: notification._id,
+      });
+    }
+
+    // 🔔 Notify Admins
+    const admins = await User.find({ roles: "admin" }, "_id");
+    const adminMessage = `Dealer ${dealerName} updated donation status to '${status}'.`;
+
+    for (const admin of admins) {
+      const notification = await Notification.create({
+        userId: admin._id.toString(),
+        message: adminMessage,
+        type: "dealer-update",
+      });
+      io.to(admin._id.toString()).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
       });
@@ -1512,23 +1568,39 @@ const addPriceandweight = async (req, res) => {
 
     await donation.save();
 
+     const io = getIO();
+    const dealerName = donation.dealer?.firstName || "Dealer";
+
+    // 🔔 Notify Donor
     const donorId = donation.donor?._id?.toString();
     if (donorId) {
-      const message = `Dealer ${
-        donation.dealer?.firstName || "Dealer"
-      } updated your donation with price ₹${price} and weight ${weight}kg.`;
-
+      const message = `Dealer ${dealerName} updated your donation with price ₹${price} and weight ${weight}kg.`;
       const notification = await Notification.create({
         userId: donorId,
         message,
         type: "donation-update",
       });
-
-      const io = getIO();
       io.to(donorId).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
       });
+    }
+
+    // 🔔 Notify Admins
+    const admins = await User.find({ roles: "admin" }, "_id");
+    const adminMessage = `Dealer ${dealerName} updated price ₹${price} and weight ${weight}kg for a donation.`;
+
+    for (const admin of admins) {
+      const notification = await Notification.create({
+        userId: admin._id.toString(),
+        message: adminMessage,
+        type: "dealer-update",
+      });
+      io.to(admin._id.toString()).emit("newNotification", {
+        message: notification.message,
+        notificationId: notification._id,
+      });
+    
 
       return res.status(200).json({
         success: true,
@@ -1960,6 +2032,18 @@ const assignRecycler = async (req, res) => {
 
     await donation.save();
 
+      // 🔔 Notify recycler via Socket.IO
+     const io = getIO();
+   
+      io.to(recyclerId).emit("notification", {
+        type: "donation-assigned",
+        title: "New Donation Assigned",
+        message: `A new donation has been assigned to you.`,
+        donationId: donation._id,
+      });
+    
+
+
     res.status(200).json({
       success: true,
       message: "Recycler assigned successfully",
@@ -2056,6 +2140,16 @@ const recyclerUpdateStatus = async (req, res) => {
     });
 
     await donation.save();
+
+    const io = getIO();
+   
+    io.to(donation.dealer._id.toString()).emit("notification", {
+      title: "Donation Updated",
+      message: `Recycler updated donation status to '${status}'.`,
+      donationId: donation._id,
+      type: "donation-update",
+      timestamp: new Date(),
+    });
 
     res
       .status(200)

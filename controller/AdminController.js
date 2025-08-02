@@ -8,6 +8,7 @@ const Impact = require("../Model/Impact");
 const Logo = require("../Model/Logo");
 const Gaudaan = require("../Model/GaudaanModel");
 const Shelter = require("../Model/ShelterModel");
+const Contact = require("../Model/ContactModel");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -1908,8 +1909,8 @@ const getGaudaanSubmissions = async (req, res) => {
     const data = await Gaudaan.find({
       status: { $in: ["unassigned", "assigned", "picked_up"] },
     })
-      .populate("assignedVolunteer", "firstName lastName phone")
-      .populate("shelterId", "name address phone")
+      .populate("assignedVolunteer", "firstName lastName phone profileImage")
+      .populate("shelterId", "name address phone profileImage")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -2086,6 +2087,32 @@ const rejectGaudaan = async (req, res) => {
   }
 };
 
+//contacts
+const getContacts = async (req, res) => {
+  try {
+    const contacts = await Contact.find();
+    if (!contacts) {
+      return res.status(404).json({ success: false, message: "Contact not found" });
+    }
+    res.status(200).json({ success: true, message: "Contacts fetched",contacts });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+const deleteContact = async (req, res) => {
+  try {
+    const contact = await Contact.findByIdAndDelete(req.params.id);
+    if (!contact) {
+      return res.status(404).json({ success: false, message: "Contact not found" });
+    }
+    res.status(200).json({ success: true, message: "Contact deleted" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
 module.exports = {
   getAdmin,
   getAdminProfile,
@@ -2137,4 +2164,6 @@ module.exports = {
   getVolunteerUsers,
   assignVolunteer,
   rejectGaudaan,
+  getContacts,
+  deleteContact,
 };
