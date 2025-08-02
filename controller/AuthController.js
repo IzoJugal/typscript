@@ -30,27 +30,21 @@ const volunteerSignup = async (req, res) => {
 
   // Input validation
   if (!firstName) {
-    console.log("Validation Error: Missing First Name");
     return res.status(400).json({ message: "Missing First Name" });
   }
   if (!lastName) {
-    console.log("Validation Error: Missing Last Name");
     return res.status(400).json({ message: "Missing Last Name" });
   }
   if (!email) {
-    console.log("Validation Error: Missing Email");
     return res.status(400).json({ message: "Missing Email" });
   }
   if (!phone) {
-    console.log("Validation Error: Missing Phone Number");
     return res.status(400).json({ message: "Missing Phone Number" });
   }
   if (!password) {
-    console.log("Validation Error: Missing Password");
     return res.status(400).json({ message: "Missing Password" });
   }
   if (!otp || !method) {
-    console.log("Validation Error: Missing OTP or method");
     return res.status(400).json({ message: "OTP and method required" });
   }
 
@@ -281,7 +275,6 @@ const sendOTPAuth = async (req, res) => {
     otpStore.set(key, { otp, expiresAt });
 
     if (method === "phone") {
-      console.log(`Sending OTP to ${phone}: ${otp}`); // 👀 For dev only
       await sendSMSOTP(phone, otp);
     } else {
       return res.status(400).json({ message: "Invalid OTP method" });
@@ -1669,9 +1662,7 @@ const getHistory = async (req, res) => {
 //Sliders Image
 const getSliders = async (req, res) => {
   try {
-    console.log("Fetching sliders from database...");
     const sliders = await Slider.find();
-    console.log("Sliders fetched:", sliders.length);
     res.status(200).json({
       success: true,
       message: "Sliders fetched successfully",
@@ -1693,13 +1684,10 @@ const getSliders = async (req, res) => {
 
 const logoGet = async (req, res) => {
   try {
-    console.log("Connecting to database...");
     const logo = await Logo.findOne().sort({ createdAt: -1 });
     if (!logo) {
-      console.log("No logo found in the database");
       return res.status(404).json({ message: "No logo found" });
     }
-    console.log("Logo fetched:", logo);
     res.status(200).json({
       success: true,
       message: "Logo fetched successfully",

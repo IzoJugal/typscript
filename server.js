@@ -38,8 +38,7 @@ app.use("/uploads", express.static("uploads"));
 
 connectDB()
   .then(() => {
-    console.log("🌐 MongoDB Connected Successfully.");
-
+    
     // 🔁 Define Routes
     app.use("/auth", authRoute);
     app.use("/admin", adminRoute);
@@ -48,7 +47,6 @@ connectDB()
 
     // 🧪 Root Health Check
     app.get("/", (req, res) => {
-      console.log("🚀 API Gauabhayaranyam Run Success.");
       res
         .status(200)
         .json({ success: true, message: "API Gauabhayaranyam Run." });
@@ -56,7 +54,6 @@ connectDB()
 
     // 🛡️ Start Server
     app.listen(PORT, () => {
-      console.log(`✅ Server running on port: ${PORT}`);
     });
   })
   .catch((error) => {
