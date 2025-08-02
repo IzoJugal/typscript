@@ -81,12 +81,14 @@ router.route('/task').post(adminMiddleware, controller.createVolunteerTask);
 
 router.route("/task/:taskId").patch(adminMiddleware, controller.updateVolunteerTask);
 
+router.route("/task/:taskId").delete(adminMiddleware, controller.deleteVolunteerTask);
+
 router.route('/tasks').get(adminMiddleware, controller.getAllVolunteerTasks);
 
 //Users Data
 router.route("/users").get(adminMiddleware, controller.getUsers);
 
-router.route('/users/:id').patch(adminMiddleware, controller.updateUserById);
+router.route('/users/:id').patch(adminMiddleware, uploadMultiple, controller.updateUserById);
 
 router.route('/users/:id').get(adminMiddleware, controller.getUserById);
 
@@ -99,7 +101,7 @@ router.route("/getdealers").get(adminMiddleware, controller.fetchDealers);
 
 router.route('/dealer/:id').get(adminMiddleware, controller.getDealerById);
 
-router.route('/dealer/:id').patch(adminMiddleware, controller.updateDealerById);
+router.route('/dealer/:id').patch(adminMiddleware, uploadMultiple, controller.updateDealerById);
 
 router.route('/dealer/:id').delete(adminMiddleware, controller.deleteDealerById);
 
@@ -123,12 +125,20 @@ router.route("/impacts").get(adminMiddleware, controller.getImpacts);
 router.route("/impacts").post(adminMiddleware, controller.saveImpacts); 
 
 //Shelter
-router.post('/shelters', adminMiddleware,  controller.createShelter);
+router.post('/shelters', adminMiddleware, uploadMultiple, controller.createShelter);
+
+router.patch("/shelter/:id", adminMiddleware, uploadMultiple, controller.updateShelter);
 
 router.get('/shelters', adminMiddleware,  controller.getAllShelters);
 
+router.patch('/shelter/:id/active', adminMiddleware, controller.shelterToggle)
+
+router.delete('/shelter/:id', adminMiddleware, controller.deleteShelter);
+
 //Gaudaan Data
 router.route("/gaudaan").get(adminMiddleware, controller.getGaudaanSubmissions); 
+
+router.route("/gaudaan/:id").get(adminMiddleware, controller.getGaudaanById); 
 
 router.route("/uvolunteer").get(adminMiddleware, controller.getVolunteerUsers);
 

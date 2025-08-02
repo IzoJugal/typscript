@@ -11,7 +11,7 @@ const volunteerTaskSchema = new mongoose.Schema(
     taskType: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     description: {
       type: String,
@@ -24,7 +24,7 @@ const volunteerTaskSchema = new mongoose.Schema(
       required: true,
     },
     time: {
-      type: String, // e.g., "10:00 AM"
+      type: String,
       required: true,
       validate: {
         validator: function (v) {
@@ -35,15 +35,24 @@ const volunteerTaskSchema = new mongoose.Schema(
         message: (props) => `${props.value} is not a valid time format!`,
       },
     },
-    volunteer:[ {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User", 
-      required: false,
-    }],
+    volunteers: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        status: {
+          type: String,
+          enum: ["pending", "accepted", "rejected"],
+          default: "pending",
+        },
+      },
+    ],
     address: { type: String, trim: true },
     status: {
       type: String,
-      enum: ["pending", "in-progress", "completed", "cancelled"],
+      enum: ["pending", "active", "completed", "cancelled"],
       default: "pending",
     },
   },

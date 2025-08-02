@@ -1066,36 +1066,44 @@ const getDonationsCountByStatus = async (req, res) => {
 //Task Data
 const getMyAssignedTasks = async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const userRoles = req.user.roles; // note plural 'roles' as array
+    const { userId, roles } = req.user;
 
-    const allowedRoles = ["user", "volunteer"];
-
-    // Check if userRoles contains at least one allowed role
-    if (!userRoles.some((role) => allowedRoles.includes(role))) {
-      return res
-        .status(403)
-        .json({ message: "Access denied: Unauthorized role" });
+    // Validate roles
+    if (!Array.isArray(roles) || !roles.includes("volunteer")) {
+      return res.status(403).json({ success: false, message: "Access denied: Volunteer role required." });
     }
 
-    const tasks = await VolunteerTask.find({ volunteer: userId });
+    // Find tasks where user is in volunteers array
+    const tasks = await VolunteerTask.find({ "volunteers.user": userId })
+      .populate("volunteers.user", "firstName lastName email")
+      .lean();
 
     if (!tasks || tasks.length === 0) {
       return res.status(404).json({
-        message: "No tasks assigned to you",
+        success: false,
+        message: "No tasks assigned to you.",
       });
     }
 
+    // Add user's volunteer status to each task
+    const tasksWithVolunteerStatus = tasks.map((task) => {
+      const volunteer = task.volunteers.find((vol) => vol.user._id.toString() === userId);
+      return {
+        ...task,
+        myVolunteerStatus: volunteer ? volunteer.status : "pending",
+      };
+    });
+
     res.status(200).json({
       success: true,
-      message: "Assigned tasks fetched successfully",
-      tasks,
+      message: "Assigned tasks fetched successfully.",
+      tasks: tasksWithVolunteerStatus,
     });
   } catch (err) {
     console.error("Error fetching assigned tasks:", err);
     res.status(500).json({
       success: false,
-      message: "Server error while fetching tasks",
+      message: "Server error while fetching tasks.",
       error: err.message,
     });
   }
@@ -1103,48 +1111,50 @@ const getMyAssignedTasks = async (req, res) => {
 
 const getTaskCount = async (req, res) => {
   try {
-    console.log("req.user:", req.user); // Add this to debug
+    const { userId, roles } = req.user;
 
-    const { userId, roles } = req.user || {};
-
-    if (
-      !roles ||
-      (Array.isArray(roles)
-        ? !roles.includes("volunteer")
-        : roles !== "volunteer")
-    ) {
+    // Validate roles
+    if (!Array.isArray(roles) || !roles.includes("volunteer")) {
       return res.status(403).json({
-        message: "Access denied: only volunteers allowed.",
+        success: false,
+        message: "Access denied: Volunteer role required.",
       });
     }
 
-    const count = await VolunteerTask.countDocuments({
-      volunteer: userId,
-    });
+    // Count tasks where user is in volunteers array
+    const count = await VolunteerTask.countDocuments({ "volunteers.user": userId });
 
     res.status(200).json({
       success: true,
-      message: "Volunteer task count fetched successfully",
+      message: "Volunteer task count fetched successfully.",
       count,
     });
   } catch (err) {
     console.error("Error fetching volunteer task count:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching task count.",
+      error: err.message,
+    });
   }
 };
 
 const getTaskCountByStatus = async (req, res) => {
   try {
-    const volunteerId = req.user.userId;
-    const { roles } = req.user || {};
+    const { userId, roles } = req.user;
 
+    // Validate roles
+    if (!Array.isArray(roles) || !roles.includes("volunteer")) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: Volunteer role required.",
+      });
+    }
+
+    // Aggregate task counts by status
     const counts = await VolunteerTask.aggregate([
       {
-        $match: {
-          volunteer: new mongoose.Types.ObjectId(volunteerId),
-        },
+        $match: { "volunteers.user": new mongoose.Types.ObjectId(userId) },
       },
       {
         $group: {
@@ -1154,137 +1164,81 @@ const getTaskCountByStatus = async (req, res) => {
       },
     ]);
 
-    if (
-      !roles ||
-      (Array.isArray(roles)
-        ? !roles.includes("volunteer")
-        : roles !== "volunteer")
-    ) {
-      return res.status(403).json({
-        message: "Access denied: only volunteers allowed.",
-      });
-    }
-
-    const formatted = counts.reduce((acc, item) => {
-      acc[item._id] = item.count;
+    // Format counts to include all possible statuses
+    const allStatuses = ["pending", "active", "completed", "cancelled"];
+    const result = allStatuses.reduce((acc, status) => {
+      acc[status] = 0;
       return acc;
     }, {});
-
-    const allStatuses = ["pending", "in-progress", "completed", "cancelled"];
-    const result = {};
-    allStatuses.forEach((status) => {
-      result[status] = formatted[status] || 0;
+    counts.forEach((item) => {
+      result[item._id] = item.count;
     });
 
     res.status(200).json({
       success: true,
-      message: "Volunteer task counts fetched successfully",
+      message: "Volunteer task counts fetched successfully.",
       counts: result,
     });
   } catch (err) {
     console.error("Error fetching volunteer task counts by status:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching task counts.",
+      error: err.message,
+    });
   }
 };
 
 const updateTaskStatus = async (req, res) => {
+  const { id } = req.params;
+  const { action } = req.body;
+  const userId = req.user?.userId;
+
+  // Validate action
+  if (!["accept", "reject"].includes(action)) {
+    return res.status(400).json({ success: false, message: "Invalid action." });
+  }
+
+   // Map action to status
+  const statusMap = {
+    accept: "accepted",
+    reject: "rejected"
+  };
+
+  const statusToUpdate = statusMap[action] || "pending";
+
   try {
-    const { id: taskId } = req.params;
-    const { action } = req.body;
-    const userId = req.user.userId;
+    const updatedTask = await VolunteerTask.findOneAndUpdate(
+      {
+        _id: id,
+        "volunteers.user": userId,
+      },
+      {
+        $set: {
+          "volunteers.$.status":statusToUpdate,
+        },
+      },
+      { new: true }
+    ).populate("volunteers.user", "firstName lastName");
 
-    const task = await VolunteerTask.findById(taskId);
-    if (!task) {
-      return res.status(404).json({ message: "Task not found" });
-    }
-
-    // Only assigned volunteer can update
-    const roles = req.user.roles || []; // ["user", "volunteer"]
-
-    // Check if user has role "volunteer"
-    const isVolunteer = Array.isArray(roles)
-      ? roles.includes("volunteer")
-      : roles === "volunteer";
-
-    // Allow if admin OR the volunteer assigned to this task
-    const isAuthorized = isVolunteer && task.volunteer.toString() === userId;
-
-    if (!isAuthorized) {
-      return res.status(403).json({ message: "Unauthorized" });
-    }
-
-    const allowedActions = ["accept", "reject", "complete"];
-    if (!allowedActions.includes(action)) {
-      return res.status(400).json({ message: `Invalid action: ${action}` });
-    }
-
-    // Block any update if already cancelled
-    if (task.status === "cancelled") {
-      return res
-        .status(400)
-        .json({ message: "Cannot update a cancelled task" });
-    }
-
-    if (action === "accept") {
-      if (task.status !== "pending") {
-        return res.status(400).json({
-          message: "Only pending tasks can be accepted",
-        });
-      }
-      task.status = "in-progress";
-    } else if (action === "reject") {
-      if (task.status !== "pending") {
-        return res.status(400).json({
-          message: "Only pending tasks can be rejected",
-        });
-      }
-      task.status = "cancelled";
-    } else if (action === "complete") {
-      if (task.status !== "in-progress") {
-        return res.status(400).json({
-          message: "Only in-progress tasks can be marked completed",
-        });
-      }
-      task.status = "completed";
-    } else {
-      return res.status(400).json({ message: "Invalid action" });
-    }
-
-    await task.save();
-
-    // ✅ Notify all admins
-    const admins = await User.find({ roles: "admin" }, "_id");
-    const adminIds = admins.map((a) => a._id.toString());
-    const message = `Task "${task.taskTitle}" was marked ${newStatus} by volunteer`;
-
-    const createdNotifications = await Promise.all(
-      adminIds.map((adminId) =>
-        Notification.create({
-          userId: adminId,
-          message,
-        })
-      )
-    );
-
-    // ✅ Emit real-time notification
-    const io = getIO();
-    adminIds.forEach((adminId, index) => {
-      io.to(adminId).emit("newNotification", {
-        message,
-        notificationId: createdNotifications[index]._id,
+    if (!updatedTask) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found or you're not assigned as a volunteer.",
       });
-    });
+    }
 
-    res
-      .status(200)
-      .json({ success: true, message: "Task status updated", task });
-  } catch (err) {
-    console.error("Task status update error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error: err.message });
+    return res.status(200).json({
+      success: true,
+      message: `Task ${action}ed successfully.`,
+      task: updatedTask,
+    });
+  } catch (error) {
+    console.error("Error updating volunteer task status:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
   }
 };
 

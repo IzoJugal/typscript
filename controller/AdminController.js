@@ -461,8 +461,8 @@ const getDonationById = async (req, res) => {
     const { id } = req.params;
 
     const donation = await Donation.findById(id)
-      .populate("dealer", "firstName lastName email phone profileImage") 
-      .populate("donor", "firstName lastName email phone profileImage") 
+      .populate("dealer", "firstName lastName email phone profileImage")
+      .populate("donor", "firstName lastName email phone profileImage")
       .exec();
 
     if (!donation) {
@@ -491,23 +491,23 @@ const getActiveDonations = async (req, res) => {
   try {
     // Fetch donations where status is NOT 'donated' or 'cancelled'
     const donations = await Donation.find({
-      status: { $nin: ['donated', 'cancelled'] }
+      status: { $nin: ["donated", "cancelled"] },
     })
-      .populate('donor',"firstName lastName phone profileImage")
-      .populate('dealer',"firstName lastName phone profileImage")
+      .populate("donor", "firstName lastName phone profileImage")
+      .populate("dealer", "firstName lastName phone profileImage")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
-      message: 'Active donations fetched successfully',
+      message: "Active donations fetched successfully",
       count: donations.length,
       donations,
     });
   } catch (error) {
-    console.error('Error fetching active donations:', error);
+    console.error("Error fetching active donations:", error);
     return res.status(500).json({
       success: false,
-      message: 'Server error while fetching donations',
+      message: "Server error while fetching donations",
       error: error.message,
     });
   }
@@ -629,7 +629,7 @@ const assignDealer = async (req, res) => {
       donation.pickupTime
     );
 
-  const dealerMessage = `A new donation has been assigned to you. Pickup scheduled for ${formattedDateTime}.`;
+    const dealerMessage = `A new donation has been assigned to you. Pickup scheduled for ${formattedDateTime}.`;
     const donorMessage = `Your donation has been assigned to ${dealer.firstName} ${dealer.lastName}. Status: ${finalStatus}.`;
 
     // Notify Dealer
@@ -769,114 +769,89 @@ const createVolunteerTask = async (req, res) => {
       description,
       date,
       time,
-      volunteer,
+      volunteers,
       address,
-      status,
     } = req.body;
 
-    // Basic required fields check
     if (
-      !taskTitle ||
-      !taskType ||
-      !description ||
-      !date ||
-      !time ||
-      !volunteer ||
-      !Array.isArray(volunteer) ||
-      volunteer.length === 0
+      !taskTitle || !taskType || !description || !date || !time ||
+      !Array.isArray(volunteers) || volunteers.length === 0
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "taskTitle, taskType, description, date, time, and at least one volunteer are required.",
+        message: "Required fields: taskTitle, taskType, description, date, time, and at least one volunteer.",
       });
     }
 
-    // Validate date (must be a valid date and not in the past)
     const parsedDate = new Date(date);
-    if (isNaN(parsedDate.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid date format. Please use a valid date (YYYY-MM-DD).",
-      });
+    if (isNaN(parsedDate)) {
+      return res.status(400).json({ success: false, message: "Invalid date format." });
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (parsedDate < today) {
-      return res.status(400).json({
-        success: false,
-        message: "Task date cannot be in the past.",
-      });
+      return res.status(400).json({ success: false, message: "Date cannot be in the past." });
     }
 
-    // Validate time (AM/PM or 24hr)
     const timeRegex =
       /^((0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM))|([01]?[0-9]|2[0-3]):[0-5][0-9]$/i;
     if (!timeRegex.test(time)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid time format. Use HH:MM AM/PM or 24hr format (HH:MM).",
-      });
+      return res.status(400).json({ success: false, message: "Invalid time format." });
     }
 
-    // Validate volunteer IDs and roles
+    // Normalize volunteers to array of user IDs
+    const volunteerIds = volunteers.map(v => typeof v === 'object' ? v.user : v);
+
+    // Validate all volunteers
     const validVolunteers = await User.find({
-      _id: { $in: volunteer },
+      _id: { $in: volunteerIds },
       $or: [
-        { roles: "volunteer" }, // Single role: "volunteer"
-        { roles: { $all: ["user", "volunteer"] } }, // Array of roles including both "user" and "volunteer"
+        { roles: "volunteer" },
+        { roles: { $all: ["user", "volunteer"] } },
       ],
     }).select("_id");
-    const validVolunteerIds = validVolunteers.map((vol) => vol._id.toString());
-    if (validVolunteerIds.length !== volunteer.length) {
+
+    const validVolunteerIds = validVolunteers.map(v => v._id.toString());
+    if (validVolunteerIds.length !== volunteerIds.length) {
       return res.status(400).json({
         success: false,
-        message: "One or more volunteer IDs are invalid or do not have the required roles.",
+        message: "One or more volunteer IDs are invalid or unauthorized.",
       });
     }
 
-    const normalizedStatus = status?.toLowerCase() || "pending"; // Default status if not provided
+    const volunteersWithStatus = validVolunteerIds.map(id => ({
+      user: id,
+      status: "pending",
+    }));
 
-    // Create task
     const newTask = new Task({
       taskTitle,
       taskType,
       description,
       date: parsedDate,
       time,
-      volunteer, // Store as array of volunteer IDs
+      volunteers: volunteersWithStatus,
       address,
-      status: normalizedStatus,
     });
 
     await newTask.save();
 
-    // Create notifications for each volunteer
-    const Notification = mongoose.model("Notification"); // Ensure Notification model is referenced
-    const notifications = await Promise.all(
-      volunteer.map(async (volunteerId) => {
-        const notification = await Notification.create({
-          userId: volunteerId,
-          message: `You have been assigned a new task: ${taskTitle}`,
-        });
-        return notification;
-      })
-    );
+    // Create and send notifications
+    const Notification = mongoose.model("Notification");
+    const io = getIO();
 
-    // Emit notifications via Socket.IO for each volunteer
-    const io = getIO(); // Get socket instance
-    volunteer.forEach((volunteerId) => {
-      const notification = notifications.find(
-        (notif) => notif.userId.toString() === volunteerId
-      );
-      if (notification) {
-        io.to(volunteerId.toString()).emit("newNotification", {
-          message: notification.message,
-          notificationId: notification._id,
-        });
-      }
-    });
+    for (const volId of validVolunteerIds) {
+      const notif = await Notification.create({
+        userId: volId,
+        message: `You have been assigned a new task: ${taskTitle}`,
+      });
+
+      io.to(volId.toString()).emit("newNotification", {
+        message: notif.message,
+        notificationId: notif._id,
+      });
+    }
 
     return res.status(201).json({
       success: true,
@@ -902,70 +877,152 @@ const updateVolunteerTask = async (req, res) => {
       description,
       date,
       time,
-      volunteer,
+      volunteers, // Can be array of IDs or [{ user: id }]
       address,
       status,
     } = req.body;
 
-    // Fetch existing task
-    const existingTask = await Task.findById(taskId);
-    if (!existingTask) {
-      return res.status(404).json({
-        success: false,
-        message: "Task not found.",
-      });
+    // Validate taskId
+    if (!taskId || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
+      return res.status(400).json({ success: false, message: "Invalid task ID format." });
     }
 
-    // Validate date if provided
-    if (date) {
-      const parsedDate = new Date(date);
-      if (isNaN(parsedDate.getTime())) {
+    // Find existing task
+    const existingTask = await Task.findById(taskId);
+    if (!existingTask) {
+      return res.status(404).json({ success: false, message: "Task not found." });
+    }
+
+    // Update and validate status
+    if (status) {
+      const validStatuses = ["pending", "active", "completed", "cancelled"];
+      if (!validStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
-          message: "Invalid date format. Please use a valid date.",
+          message: "Invalid status. Must be one of: pending, active, completed, cancelled.",
         });
+      }
+      existingTask.status = status;
+
+      // Optional: Notify volunteers if status changes to 'completed' or 'cancelled'
+      if (status === "completed" || status === "cancelled") {
+        const io = getIO();
+        for (const vol of existingTask.volunteers) {
+          const notif = await Notification.create({
+            userId: vol.user,
+            message: `Task "${existingTask.taskTitle}" has been ${status}.`,
+          });
+          io.to(vol.user.toString()).emit("newNotification", {
+            message: notif.message,
+            notificationId: notif._id,
+          });
+        }
+      }
+    }
+
+    // Update and validate date
+    if (date) {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate)) {
+        return res.status(400).json({ success: false, message: "Invalid date format." });
       }
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       if (parsedDate < today) {
-        return res.status(400).json({
-          success: false,
-          message: "Task date cannot be in the past.",
-        });
+        return res.status(400).json({ success: false, message: "Task date cannot be in the past." });
       }
 
       existingTask.date = parsedDate;
     }
 
-    // Validate time format if provided
+    // Update and validate time
     if (time) {
       const timeRegex =
         /^((0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM))|([01]?[0-9]|2[0-3]):[0-5][0-9]$/i;
       if (!timeRegex.test(time)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid time format. Use HH:MM AM/PM or 24hr format.",
-        });
+        return res.status(400).json({ success: false, message: "Invalid time format." });
       }
-
       existingTask.time = time;
     }
 
-    // Update other fields if present
-    if (taskTitle) existingTask.taskTitle = taskTitle;
-    if (taskType) existingTask.taskType = taskType;
-    if (description) existingTask.description = description;
-    if (volunteer) existingTask.volunteer = volunteer;
-    if (address) existingTask.address = address;
-    if (status) existingTask.status = status.toLowerCase();
+    // Update basic fields with sanitization
+    if (taskTitle) existingTask.taskTitle = taskTitle.trim();
+    if (taskType) existingTask.taskType = taskType.trim();
+    if (description) existingTask.description = description.trim();
+    if (address) existingTask.address = address.trim();
+
+    // Update volunteers if provided
+    if (volunteers) {
+      if (!Array.isArray(volunteers) || volunteers.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Volunteers must be a non-empty array.",
+        });
+      }
+
+      const volunteerIds = volunteers.map((v) => (typeof v === "object" ? v.user : v)).filter(Boolean);
+
+      if (volunteerIds.some((id) => !/^[0-9a-fA-F]{24}$/.test(id))) {
+        return res.status(400).json({
+          success: false,
+          message: "One or more volunteer IDs are invalid.",
+        });
+      }
+
+      const validVolunteers = await User.find({
+        _id: { $in: volunteerIds },
+        $or: [{ roles: "volunteer" }, { roles: { $all: ["user", "volunteer"] } }],
+      }).select("_id");
+
+      const validVolunteerIds = validVolunteers.map((v) => v._id.toString());
+
+      if (validVolunteerIds.length !== volunteerIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: "One or more volunteer IDs are invalid or unauthorized.",
+        });
+      }
+
+      // Preserve existing volunteer statuses if not reassigned
+      const existingVolunteerMap = new Map(
+        existingTask.volunteers.map((vol) => [vol.user.toString(), vol.status])
+      );
+      existingTask.volunteers = validVolunteerIds.map((id) => ({
+        user: id,
+        status: existingVolunteerMap.get(id) || "pending",
+      }));
+
+      // Notify new volunteers
+      const newVolunteers = validVolunteerIds.filter(
+        (id) => !existingVolunteerMap.has(id)
+      );
+      if (newVolunteers.length > 0) {
+        const io = getIO();
+        for (const volId of newVolunteers) {
+          const notif = await Notification.create({
+            userId: volId,
+            message: `You have been assigned a new task: ${existingTask.taskTitle}`,
+          });
+          io.to(volId.toString()).emit("newNotification", {
+            message: notif.message,
+            notificationId: notif._id,
+          });
+        }
+      }
+    }
 
     await existingTask.save();
+
+    // Populate task for response
+    const updatedTask = await Task.findById(taskId)
+      .populate("volunteers.user", "firstName lastName email")
+      .lean();
 
     return res.status(200).json({
       success: true,
       message: "Volunteer task updated successfully.",
-      task: existingTask,
+      task: updatedTask,
     });
   } catch (error) {
     console.error("Error updating volunteer task:", error);
@@ -980,20 +1037,70 @@ const updateVolunteerTask = async (req, res) => {
 const getAllVolunteerTasks = async (req, res) => {
   try {
     const tasks = await Task.find()
-      .populate("volunteer", "firstName lastName email")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "volunteers.user",
+        select: "firstName lastName email profileImage", // Only fetch necessary fields
+      });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Volunteer tasks fetched successfully",
+      message: "Volunteer tasks fetched successfully.",
       count: tasks.length,
       tasks,
     });
   } catch (error) {
     console.error("Error fetching tasks:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Server error while fetching tasks",
+      message: "Server error while fetching tasks.",
+      error: error.message,
+    });
+  }
+};
+
+const deleteVolunteerTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    // Validate taskId
+    if (!taskId || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
+      return res.status(400).json({ success: false, message: "Invalid task ID format." });
+    }
+
+    // Find existing task
+    const existingTask = await Task.findById(taskId).populate("volunteers.user", "firstName lastName email");
+    if (!existingTask) {
+      return res.status(404).json({ success: false, message: "Task not found." });
+    }
+
+    // Notify assigned volunteers
+    if (existingTask.volunteers && existingTask.volunteers.length > 0) {
+      const io = getIO();
+      for (const vol of existingTask.volunteers) {
+        const notif = await Notification.create({
+          userId: vol.user._id,
+          message: `Task "${existingTask.taskTitle}" has been deleted.`,
+        });
+        io.to(vol.user._id.toString()).emit("newNotification", {
+          message: notif.message,
+          notificationId: notif._id,
+        });
+      }
+    }
+
+    // Delete the task
+    await Task.findByIdAndDelete(taskId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Volunteer task deleted successfully.",
+    });
+  } catch (error) {
+    console.error("Error deleting volunteer task:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while deleting task.",
       error: error.message,
     });
   }
@@ -1071,7 +1178,38 @@ const updateUserById = async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (email) user.email = email;
-    if (profileImage !== undefined) user.profileImage = profileImage;
+
+    if (req.files && req.files.profileImage && req.files.profileImage[0]) {
+      const file = req.files.profileImage[0];
+
+      // Delete previous profile image from GridFS if it exists
+      if (user.profileImage) {
+        const oldImage = await conn.db.collection("uploads.files").findOne({
+          filename: user.profileImage,
+        });
+        if (oldImage) {
+          await gfs.delete(new mongoose.Types.ObjectId(oldImage._id));
+        }
+      }
+
+      // Upload new image to GridFS
+      const filename = `${Date.now()}-${file.originalname}`;
+      const uploadStream = gfs.openUploadStream(filename, {
+        contentType: file.mimetype,
+      });
+
+      uploadStream.write(file.buffer);
+      uploadStream.end();
+
+      await new Promise((resolve, reject) => {
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error", reject);
+      });
+
+      user.profileImage = filename;
+    } else if (req.body.profileImage) {
+      user.profileImage = req.body.profileImage;
+    }
 
     await user.save();
 
@@ -1138,6 +1276,19 @@ const toggleUserStatus = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
+     // ✅ Notify the dealer
+    const message = `Your user account has been ${isActive ? "activated" : "deactivated"}.`;
+    const notification = await Notification.create({
+      userId: user._id,
+      message,
+    });
+
+    const io = getIO();
+    io.to(user._id.toString()).emit("newNotification", {
+      message,
+      notificationId: notification._id,
+    });
 
     res.status(200).json({
       success: true,
@@ -1234,7 +1385,38 @@ const updateDealerById = async (req, res) => {
     if (lastName) dealer.lastName = lastName;
     if (phone) dealer.phone = phone;
     if (email) dealer.email = email;
-    if (profileImage !== undefined) dealer.profileImage = profileImage;
+
+    if (req.files && req.files.profileImage && req.files.profileImage[0]) {
+      const file = req.files.profileImage[0];
+
+      // Delete previous profile image from GridFS if it exists
+      if (dealer.profileImage) {
+        const oldImage = await conn.db.collection("uploads.files").findOne({
+          filename: dealer.profileImage,
+        });
+        if (oldImage) {
+          await gfs.delete(new mongoose.Types.ObjectId(oldImage._id));
+        }
+      }
+
+      // Upload new image to GridFS
+      const filename = `${Date.now()}-${file.originalname}`;
+      const uploadStream = gfs.openUploadStream(filename, {
+        contentType: file.mimetype,
+      });
+
+      uploadStream.write(file.buffer);
+      uploadStream.end();
+
+      await new Promise((resolve, reject) => {
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error", reject);
+      });
+
+      dealer.profileImage = filename;
+    } else if (req.body.profileImage) {
+      dealer.profileImage = req.body.profileImage;
+    }
 
     await dealer.save();
 
@@ -1301,6 +1483,19 @@ const toggleDealerStatus = async (req, res) => {
     if (!dealer) {
       return res.status(404).json({ message: "Dealer not found" });
     }
+
+     // ✅ Notify the dealer
+    const message = `Your dealer account has been ${isActive ? "activated" : "deactivated"}.`;
+    const notification = await Notification.create({
+      userId: dealer._id,
+      message,
+    });
+
+    const io = getIO();
+    io.to(dealer._id.toString()).emit("newNotification", {
+      message,
+      notificationId: notification._id,
+    });
 
     res.status(200).json({
       success: true,
@@ -1507,18 +1702,121 @@ const getImpacts = async (req, res) => {
   }
 };
 
+//Shelters
 const createShelter = async (req, res) => {
   try {
-    const shelter = new Shelter(req.body);
-    const saved = await shelter.save();
-    res
-      .status(201)
-      .json({ success: true, message: "Shelter created", shelter: saved });
+    const { name, contactPerson, phone, email, address, capacity } = req.body;
+
+    let profileImage = null;
+
+    // Upload profile image if present (from multer with memoryStorage)
+    if (req.files && req.files.profileImage && req.files.profileImage[0]) {
+      const file = req.files.profileImage[0];
+      const filename = `${Date.now()}-${file.originalname}`;
+
+      const uploadStream = gfs.openUploadStream(filename, {
+        contentType: file.mimetype,
+      });
+
+      uploadStream.write(file.buffer);
+      uploadStream.end();
+
+      await new Promise((resolve, reject) => {
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error", reject);
+      });
+
+      profileImage = filename;
+    } else if (req.body.profileImage) {
+      // If image URL or GridFS filename passed directly (optional)
+      profileImage = req.body.profileImage;
+    }
+
+    const newShelter = new Shelter({
+      name,
+      contactPerson,
+      phone,
+      email,
+      address,
+      capacity,
+      profileImage,
+    });
+
+    await newShelter.save();
+
+    res.status(201).json({ success: true, shelter: newShelter });
   } catch (err) {
-    console.error("Shelter create error:", err);
+    console.error("Error creating shelter:", err);
     res.status(500).json({
       success: false,
-      message: "Error creating shelter",
+      message: "Failed to create shelter",
+      error: err.message,
+    });
+  }
+};
+
+const updateShelter = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { name, contactPerson, phone, address, capacity, currentOccupancy } =
+      req.body;
+
+    const shelter = await Shelter.findById(id);
+    if (!shelter) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Shelter not found" });
+    }
+
+    // Image update
+    if (req.files && req.files.profileImage && req.files.profileImage[0]) {
+      const file = req.files.profileImage[0];
+      const filename = `${Date.now()}-${file.originalname}`;
+
+      // Delete old image from GridFS
+      if (shelter.profileImage) {
+        const oldImage = await conn.db.collection("uploads.files").findOne({
+          filename: shelter.profileImage,
+        });
+
+        if (oldImage) {
+          await gfs.delete(new mongoose.Types.ObjectId(oldImage._id));
+        }
+      }
+
+      // Upload new image to GridFS
+      const uploadStream = gfs.openUploadStream(filename, {
+        contentType: file.mimetype,
+      });
+
+      uploadStream.write(file.buffer);
+      uploadStream.end();
+
+      await new Promise((resolve, reject) => {
+        uploadStream.on("finish", resolve);
+        uploadStream.on("error", reject);
+      });
+
+      shelter.profileImage = filename;
+    }
+
+    // Update other fields
+    shelter.name = name ?? shelter.name;
+    shelter.contactPerson = contactPerson ?? shelter.contactPerson;
+    shelter.phone = phone ?? shelter.phone;
+    shelter.address = address ?? shelter.address;
+    shelter.capacity = capacity ?? shelter.capacity;
+    shelter.currentOccupancy = currentOccupancy ?? shelter.currentOccupancy;
+
+    await shelter.save();
+
+    res.status(200).json({ success: true, shelters: shelter });
+  } catch (err) {
+    console.error("Error updating shelter:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update shelter",
       error: err.message,
     });
   }
@@ -1534,6 +1832,60 @@ const getAllShelters = async (req, res) => {
       message: "Error fetching shelters",
       error: err.message,
     });
+  }
+};
+
+const shelterToggle = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    const shelter = await Shelter.findByIdAndUpdate(
+      id,
+      { isActive },
+      { new: true }
+    );
+
+    if (!shelter) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Shelter not found" });
+    }
+
+    const io = req.app.get("io");
+    io.emit("shelter-status-updated", {
+      shelterId: shelter._id,
+      name: shelter.name,
+      isActive: shelter.isActive,
+      timestamp: new Date(),
+      message: `Shelter "${shelter.name}" is now ${
+        shelter.isActive ? "Active ✅" : "Inactive ❌"
+      }`,
+    });
+
+    res.json({ success: true, message: "Shelter status updated", shelter });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+const deleteShelter = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const shelter = await Shelter.findByIdAndDelete(id);
+
+    if (!shelter) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Shelter not found" });
+    }
+
+    res.json({ success: true, message: "Shelter deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -1553,7 +1905,9 @@ const getGaudaanSubmissions = async (req, res) => {
       });
     }
 
-    const data = await Gaudaan.find()
+    const data = await Gaudaan.find({
+      status: { $in: ["unassigned", "assigned", "picked_up"] },
+    })
       .populate("assignedVolunteer", "firstName lastName phone")
       .populate("shelterId", "name address phone")
       .sort({ createdAt: -1 });
@@ -1569,6 +1923,28 @@ const getGaudaanSubmissions = async (req, res) => {
       message: "Error fetching data",
       error: err.message,
     });
+  }
+};
+
+const getGaudaanById = async (req, res) => {
+  try {
+    const gaudaan = await Gaudaan.findById(req.params.id)
+      .populate("donor", "firstName LastName phone profileImage")
+      .populate("assignedVolunteer", "firstName LastName phone profileImage");
+
+    if (!gaudaan) {
+      return res.status(404).json({ message: "Gaudaan not found" });
+    }
+    res.status(200).json({
+      success: true,
+      message: "Gaudaan fetched by id successfully",
+      gaudaan,
+    });
+  } catch (err) {
+    console.error("Error fetching gaudaan:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -1601,25 +1977,49 @@ const assignVolunteer = async (req, res) => {
       return res.status(400).json({ message: "Volunteer ID is required" });
     }
 
+    const gaudaan = await Gaudaan.findById(gaudaanId);
+    if (!gaudaan) {
+      return res.status(404).json({ message: "Gaudaan not found" });
+    }
+
+    // 🚫 Prevent assigning donor as volunteer
+    if (gaudaan.donor?.toString() === volunteerId) {
+      return res.status(400).json({
+        message: "Volunteer cannot be the same as the donor",
+      });
+    }
+
     const updated = await Gaudaan.findByIdAndUpdate(
       gaudaanId,
       { assignedVolunteer: volunteerId, status: "assigned" },
       { new: true }
     ).populate("assignedVolunteer", "firstName lastName email");
 
-    const message = `You've been assigned to a Gaudaan pickup: ${updated.animalType}`;
-    const notification = await Notification.create({
+      const io = getIO();
+
+    // ✅ Notify the Volunteer
+    const volunteerMsg = `You've been assigned to a Gaudaan pickup: ${updated.animalType}`;
+    const volunteerNotification = await Notification.create({
       userId: volunteerId,
-      message,
+      message: volunteerMsg,
     });
-
-    // ✅ Emit notification via Socket.IO
-    const io = getIO();
     io.to(volunteerId.toString()).emit("newNotification", {
-      message,
-      notificationId: notification._id,
+      message: volunteerMsg,
+      notificationId: volunteerNotification._id,
     });
 
+    // ✅ Notify the Donor (if exists)
+    if (gaudaan.donor?._id) {
+      const donorMsg = `Your Gaudaan (${updated.animalType}) has been assigned to a volunteer.`;
+      const donorNotification = await Notification.create({
+        userId: gaudaan.donor._id,
+        message: donorMsg,
+      });
+      io.to(gaudaan.donor._id.toString()).emit("newNotification", {
+        message: donorMsg,
+        notificationId: donorNotification._id,
+      });
+    }
     res.status(200).json({
       success: true,
       message: "Volunteer assigned successfully",
@@ -1658,7 +2058,9 @@ const rejectGaudaan = async (req, res) => {
     }
 
     // Optional: Notify user
-    const message = `Your Gaudaan request has been rejected. ${reason ? "Reason: " + reason : ""}`;
+    const message = `Your Gaudaan request has been rejected. ${
+      reason ? "Reason: " + reason : ""
+    }`;
     await Notification.create({
       userId: updated.donor,
       message,
@@ -1684,7 +2086,6 @@ const rejectGaudaan = async (req, res) => {
   }
 };
 
-
 module.exports = {
   getAdmin,
   getAdminProfile,
@@ -1708,6 +2109,7 @@ module.exports = {
   createVolunteerTask,
   updateVolunteerTask,
   getAllVolunteerTasks,
+  deleteVolunteerTask,
   getUsers,
   getUserById,
   updateUserById,
@@ -1726,8 +2128,12 @@ module.exports = {
   saveImpacts,
   getImpacts,
   createShelter,
+  updateShelter,
   getAllShelters,
+  shelterToggle,
+  deleteShelter,
   getGaudaanSubmissions,
+  getGaudaanById,
   getVolunteerUsers,
   assignVolunteer,
   rejectGaudaan,
