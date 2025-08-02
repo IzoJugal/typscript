@@ -114,7 +114,7 @@ const updateAdminProfile = async (req, res) => {
     }
 
     const userId = req.user.userId;
-    const { firstName, lastName, phone, email } = req.body;
+    const { firstName, lastName, phone, email,notificationsEnabled } = req.body;
 
     const admin = await Admin.findById(userId).select("-password -roles");
     if (!admin) {
@@ -126,6 +126,9 @@ const updateAdminProfile = async (req, res) => {
     if (lastName) admin.lastName = lastName;
     if (phone) admin.phone = phone;
     if (email) admin.email = email;
+ if (notificationsEnabled !== undefined) {
+      user.notificationsEnabled = notificationsEnabled === "true" || notificationsEnabled === true;
+    }
 
     // Handle profile image with GridFS
     if (req.files && req.files.profileImage && req.files.profileImage[0]) {

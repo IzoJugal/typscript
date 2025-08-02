@@ -462,7 +462,7 @@ const getUserProfile = async (req, res) => {
 const updateUserProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { firstName, lastName, phone, email } = req.body;
+    const { firstName, lastName, phone, email,notificationsEnabled } = req.body;
 
     const user = await User.findById(userId).select("-password -roles");
 
@@ -474,6 +474,9 @@ const updateUserProfile = async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (email) user.email = email;
+     if (notificationsEnabled !== undefined) {
+      user.notificationsEnabled = notificationsEnabled === "true" || notificationsEnabled === true;
+    }
 
     if (req.files && req.files.profileImage && req.files.profileImage[0]) {
       const file = req.files.profileImage[0];
