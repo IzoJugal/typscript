@@ -85,6 +85,8 @@ router.route("/task/:taskId").delete(adminMiddleware, controller.deleteVolunteer
 
 router.route('/tasks').get(adminMiddleware, controller.getAllVolunteerTasks);
 
+router.route("/task/:id").get(adminMiddleware, controller.getSingleTask);
+
 //Users Data
 router.route("/users").get(adminMiddleware, controller.getUsers);
 
@@ -145,6 +147,9 @@ router.route("/uvolunteer").get(adminMiddleware, controller.getVolunteerUsers);
 router.route("/assignVolunteer/:gaudaanId").patch(adminMiddleware, controller.assignVolunteer);
 
 router.patch("/reject/:gaudaanId", adminMiddleware, controller.rejectGaudaan);
+
+router.route("/gaudaans").get(adminMiddleware, controller.getGaudaanCR); 
+
 
 //Contacts
 router.get("/contacts", adminMiddleware, controller.getContacts);

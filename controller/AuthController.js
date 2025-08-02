@@ -1209,7 +1209,7 @@ const getTaskCountByStatus = async (req, res) => {
 const updateTaskStatus = async (req, res) => {
   const { id } = req.params;
   const { action } = req.body;
-  const userId = req.user?.userId;
+  const userId = req.user.userId;
 
   // Validate action
   if (!["accept", "reject"].includes(action)) {
@@ -1252,8 +1252,8 @@ const updateTaskStatus = async (req, res) => {
 
     const admins = await User.find({ roles: "admin" });
 
-    const notifications = admins.map((admin) => ({
-      user: admin._id,
+    const notifications = admins.map((admin,_id) => ({
+      userId: admin._id,
       type: "volunteer-task",
       title: `Task ${statusToUpdate}`,
       message: `${volunteerName} has ${statusToUpdate} a task.`,
@@ -1261,9 +1261,10 @@ const updateTaskStatus = async (req, res) => {
 
     await Notification.insertMany(notifications);
 
+    const io = getIO();
     // Optional: Emit real-time via socket.io
     admins.forEach((admin) => {
-      io.to(admin._id.toString()).emit("notification", {
+      io.to(admin.userId).emit("notification", {
         title: `Task ${statusToUpdate}`,
         message: `${volunteerName} has ${statusToUpdate} a task.`,
       });

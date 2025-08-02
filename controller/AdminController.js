@@ -1060,6 +1060,19 @@ const getAllVolunteerTasks = async (req, res) => {
   }
 };
 
+const getSingleTask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id)
+      .populate("volunteers.user", "firstName phone profileImage");
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    res.status(200).json({success: true, message:"Task By ID Fetched", task });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
 const deleteVolunteerTask = async (req, res) => {
   try {
     const { taskId } = req.params;
@@ -2087,6 +2100,45 @@ const rejectGaudaan = async (req, res) => {
   }
 };
 
+const getGaudaanCR = async (req, res) => {
+  try {
+    const roles = req.user.roles || [];
+
+    const isAdmin = Array.isArray(roles)
+      ? roles.includes("admin")
+      : roles === "admin";
+
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: Admins only",
+      });
+    }
+
+    // ✅ Fetch only 'dropped' and 'rejected' gaudaans
+    const data = await Gaudaan.find({
+      status: { $in: ["dropped", "rejected"] },
+    })
+      .populate("assignedVolunteer", "firstName lastName phone profileImage")
+      .populate("donor", "firstName lastName phone profileImage")
+      .populate("shelterId", "name address phone profileImage")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Dropped or rejected Gaudaan submissions fetched successfully",
+      data,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching data",
+      error: err.message,
+    });
+  }
+};
+
+
 //contacts
 const getContacts = async (req, res) => {
   try {
@@ -2136,6 +2188,7 @@ module.exports = {
   createVolunteerTask,
   updateVolunteerTask,
   getAllVolunteerTasks,
+  getSingleTask,
   deleteVolunteerTask,
   getUsers,
   getUserById,
@@ -2164,6 +2217,7 @@ module.exports = {
   getVolunteerUsers,
   assignVolunteer,
   rejectGaudaan,
+  getGaudaanCR,
   getContacts,
   deleteContact,
 };
