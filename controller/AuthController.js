@@ -455,7 +455,8 @@ const getUserProfile = async (req, res) => {
 const updateUserProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { firstName, lastName, phone, email,notificationsEnabled } = req.body;
+    const { firstName, lastName, phone, email, notificationsEnabled } =
+      req.body;
 
     const user = await User.findById(userId).select("-password -roles");
 
@@ -467,8 +468,9 @@ const updateUserProfile = async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (email) user.email = email;
-     if (notificationsEnabled !== undefined) {
-      user.notificationsEnabled = notificationsEnabled === "true" || notificationsEnabled === true;
+    if (notificationsEnabled !== undefined) {
+      user.notificationsEnabled =
+        notificationsEnabled === "true" || notificationsEnabled === true;
     }
 
     if (req.files && req.files.profileImage && req.files.profileImage[0]) {
@@ -598,7 +600,8 @@ const assignVolunteerRole = async (req, res) => {
 
     if (user.roles.includes("dealer") || user.roles.includes("admin")) {
       return res.status(400).json({
-        message: "Cannot combine 'volunteer' role to dealer or admin users only user",
+        message:
+          "Cannot combine 'volunteer' role to dealer or admin users only user",
       });
     }
 
@@ -610,10 +613,12 @@ const assignVolunteerRole = async (req, res) => {
       newlyAdded = true;
     }
 
-
     // ✅ Notify all admins if role added
     if (newlyAdded) {
-      const admins = await User.find({ roles: "admin" }, "_id notificationsEnabled");
+      const admins = await User.find(
+        { roles: "admin" },
+        "_id notificationsEnabled"
+      );
       const adminIds = admins.map((admin) => admin._id.toString());
 
       const message = `${user.firstName || "A user"} joined as a volunteer.`;
@@ -641,7 +646,7 @@ const assignVolunteerRole = async (req, res) => {
         });
       }
     }
-    
+
     res.status(200).json({
       success: true,
       message: "Volunteer role assigned",
@@ -1102,7 +1107,12 @@ const getMyAssignedTasks = async (req, res) => {
 
     // Validate roles
     if (!Array.isArray(roles) || !roles.includes("volunteer")) {
-      return res.status(403).json({ success: false, message: "Access denied: Volunteer role required." });
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "Access denied: Volunteer role required.",
+        });
     }
 
     // Find tasks where user is in volunteers array
@@ -1119,7 +1129,9 @@ const getMyAssignedTasks = async (req, res) => {
 
     // Add user's volunteer status to each task
     const tasksWithVolunteerStatus = tasks.map((task) => {
-      const volunteer = task.volunteers.find((vol) => vol.user._id.toString() === userId);
+      const volunteer = task.volunteers.find(
+        (vol) => vol.user._id.toString() === userId
+      );
       return {
         ...task,
         myVolunteerStatus: volunteer ? volunteer.status : "pending",
@@ -1154,7 +1166,9 @@ const getTaskCount = async (req, res) => {
     }
 
     // Count tasks where user is in volunteers array
-    const count = await VolunteerTask.countDocuments({ "volunteers.user": userId });
+    const count = await VolunteerTask.countDocuments({
+      "volunteers.user": userId,
+    });
 
     res.status(200).json({
       success: true,
@@ -1231,10 +1245,10 @@ const updateTaskStatus = async (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid action." });
   }
 
-   // Map action to status
+  // Map action to status
   const statusMap = {
     accept: "accepted",
-    reject: "rejected"
+    reject: "rejected",
   };
 
   const statusToUpdate = statusMap[action] || "pending";
@@ -1247,7 +1261,7 @@ const updateTaskStatus = async (req, res) => {
       },
       {
         $set: {
-          "volunteers.$.status":statusToUpdate,
+          "volunteers.$.status": statusToUpdate,
         },
       },
       { new: true }
@@ -1260,14 +1274,14 @@ const updateTaskStatus = async (req, res) => {
       });
     }
 
-       const volunteer = updatedTask.volunteers.find(
+    const volunteer = updatedTask.volunteers.find(
       (v) => v.user && v.user._id.toString() === userId
     );
     const volunteerName = volunteer?.user?.firstName || "A volunteer";
 
     const admins = await User.find({ roles: "admin" });
 
-    const notifications = admins.map((admin,_id) => ({
+    const notifications = admins.map((admin, _id) => ({
       userId: admin._id,
       type: "volunteer-task",
       title: `Task ${statusToUpdate}`,
@@ -1584,7 +1598,7 @@ const addPriceandweight = async (req, res) => {
 
     await donation.save();
 
-     const io = getIO();
+    const io = getIO();
     const dealerName = donation.dealer?.firstName || "Dealer";
 
     // 🔔 Notify Donor
@@ -1616,7 +1630,6 @@ const addPriceandweight = async (req, res) => {
         message: notification.message,
         notificationId: notification._id,
       });
-    
 
       return res.status(200).json({
         success: true,
@@ -1817,6 +1830,33 @@ const gaudaanForm = async (req, res) => {
     });
 
     await gaudaan.save();
+
+    // Notify all admins
+    const admins = await User.find({
+      roles: "admin",
+      notificationsEnabled: true, // optional check
+    });
+
+    const notificationPromises = admins.map((admin) => {
+      const notification = new Notification({
+        user: admin._id,
+        message: `🪔 New Gaudaan submitted by ${gaudaan.name}`,
+        link: `/admin/gaudaan/${gaudaan._id}`, // adjust route as per your frontend
+      });
+      return notification.save();
+    });
+
+    await Promise.all(notificationPromises);
+
+    // Optionally emit socket notification
+    if (req.io) {
+      admins.forEach((admin) => {
+        req.io.to(admin._id.toString()).emit("newNotification", {
+          message: `🪔 New Gaudaan submitted by ${gaudaan.name}`
+        });
+      });
+    }
+
     res
       .status(201)
       .json({ message: "Gaudaan record created successfully", data: gaudaan });
@@ -2043,17 +2083,15 @@ const assignRecycler = async (req, res) => {
 
     await donation.save();
 
-      // 🔔 Notify recycler via Socket.IO
-     const io = getIO();
-   
-      io.to(recyclerId).emit("notification", {
-        type: "donation-assigned",
-        title: "New Donation Assigned",
-        message: `A new donation has been assigned to you.`,
-        donationId: donation._id,
-      });
-    
+    // 🔔 Notify recycler via Socket.IO
+    const io = getIO();
 
+    io.to(recyclerId).emit("notification", {
+      type: "donation-assigned",
+      title: "New Donation Assigned",
+      message: `A new donation has been assigned to you.`,
+      donationId: donation._id,
+    });
 
     res.status(200).json({
       success: true,
@@ -2153,7 +2191,7 @@ const recyclerUpdateStatus = async (req, res) => {
     await donation.save();
 
     const io = getIO();
-   
+
     io.to(donation.dealer._id.toString()).emit("notification", {
       title: "Donation Updated",
       message: `Recycler updated donation status to '${status}'.`,
