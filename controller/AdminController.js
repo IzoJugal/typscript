@@ -115,7 +115,8 @@ const updateAdminProfile = async (req, res) => {
     }
 
     const userId = req.user.userId;
-    const { firstName, lastName, phone, email,notificationsEnabled } = req.body;
+    const { firstName, lastName, phone, email, notificationsEnabled } =
+      req.body;
 
     const admin = await Admin.findById(userId).select("-password -roles");
     if (!admin) {
@@ -127,8 +128,9 @@ const updateAdminProfile = async (req, res) => {
     if (lastName) admin.lastName = lastName;
     if (phone) admin.phone = phone;
     if (email) admin.email = email;
- if (notificationsEnabled !== undefined) {
-      user.notificationsEnabled = notificationsEnabled === "true" || notificationsEnabled === true;
+    if (notificationsEnabled !== undefined) {
+      user.notificationsEnabled =
+        notificationsEnabled === "true" || notificationsEnabled === true;
     }
 
     // Handle profile image with GridFS
@@ -779,45 +781,56 @@ const createVolunteerTask = async (req, res) => {
     } = req.body;
 
     if (
-      !taskTitle || !taskType || !description || !date || !time ||
-      !Array.isArray(volunteers) || volunteers.length === 0
+      !taskTitle ||
+      !taskType ||
+      !description ||
+      !date ||
+      !time ||
+      !Array.isArray(volunteers) ||
+      volunteers.length === 0
     ) {
       return res.status(400).json({
         success: false,
-        message: "Required fields: taskTitle, taskType, description, date, time, and at least one volunteer.",
+        message:
+          "Required fields: taskTitle, taskType, description, date, time, and at least one volunteer.",
       });
     }
 
     const parsedDate = new Date(date);
     if (isNaN(parsedDate)) {
-      return res.status(400).json({ success: false, message: "Invalid date format." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid date format." });
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (parsedDate < today) {
-      return res.status(400).json({ success: false, message: "Date cannot be in the past." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Date cannot be in the past." });
     }
 
     const timeRegex =
       /^((0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM))|([01]?[0-9]|2[0-3]):[0-5][0-9]$/i;
     if (!timeRegex.test(time)) {
-      return res.status(400).json({ success: false, message: "Invalid time format." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid time format." });
     }
 
     // Normalize volunteers to array of user IDs
-    const volunteerIds = volunteers.map(v => typeof v === 'object' ? v.user : v);
+    const volunteerIds = volunteers.map((v) =>
+      typeof v === "object" ? v.user : v
+    );
 
     // Validate all volunteers
     const validVolunteers = await User.find({
       _id: { $in: volunteerIds },
-      $or: [
-        { roles: "volunteer" },
-        { roles: { $all: ["user", "volunteer"] } },
-      ],
+      $or: [{ roles: "volunteer" }, { roles: { $all: ["user", "volunteer"] } }],
     }).select("_id");
 
-    const validVolunteerIds = validVolunteers.map(v => v._id.toString());
+    const validVolunteerIds = validVolunteers.map((v) => v._id.toString());
     if (validVolunteerIds.length !== volunteerIds.length) {
       return res.status(400).json({
         success: false,
@@ -825,7 +838,7 @@ const createVolunteerTask = async (req, res) => {
       });
     }
 
-    const volunteersWithStatus = validVolunteerIds.map(id => ({
+    const volunteersWithStatus = validVolunteerIds.map((id) => ({
       user: id,
       status: "pending",
     }));
@@ -889,13 +902,17 @@ const updateVolunteerTask = async (req, res) => {
 
     // Validate taskId
     if (!taskId || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
-      return res.status(400).json({ success: false, message: "Invalid task ID format." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid task ID format." });
     }
 
     // Find existing task
     const existingTask = await Task.findById(taskId);
     if (!existingTask) {
-      return res.status(404).json({ success: false, message: "Task not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Task not found." });
     }
 
     // Update and validate status
@@ -904,7 +921,8 @@ const updateVolunteerTask = async (req, res) => {
       if (!validStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
-          message: "Invalid status. Must be one of: pending, active, completed, cancelled.",
+          message:
+            "Invalid status. Must be one of: pending, active, completed, cancelled.",
         });
       }
       existingTask.status = status;
@@ -929,13 +947,20 @@ const updateVolunteerTask = async (req, res) => {
     if (date) {
       const parsedDate = new Date(date);
       if (isNaN(parsedDate)) {
-        return res.status(400).json({ success: false, message: "Invalid date format." });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid date format." });
       }
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       if (parsedDate < today) {
-        return res.status(400).json({ success: false, message: "Task date cannot be in the past." });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Task date cannot be in the past.",
+          });
       }
 
       existingTask.date = parsedDate;
@@ -946,7 +971,9 @@ const updateVolunteerTask = async (req, res) => {
       const timeRegex =
         /^((0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM))|([01]?[0-9]|2[0-3]):[0-5][0-9]$/i;
       if (!timeRegex.test(time)) {
-        return res.status(400).json({ success: false, message: "Invalid time format." });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid time format." });
       }
       existingTask.time = time;
     }
@@ -966,7 +993,9 @@ const updateVolunteerTask = async (req, res) => {
         });
       }
 
-      const volunteerIds = volunteers.map((v) => (typeof v === "object" ? v.user : v)).filter(Boolean);
+      const volunteerIds = volunteers
+        .map((v) => (typeof v === "object" ? v.user : v))
+        .filter(Boolean);
 
       if (volunteerIds.some((id) => !/^[0-9a-fA-F]{24}$/.test(id))) {
         return res.status(400).json({
@@ -977,7 +1006,10 @@ const updateVolunteerTask = async (req, res) => {
 
       const validVolunteers = await User.find({
         _id: { $in: volunteerIds },
-        $or: [{ roles: "volunteer" }, { roles: { $all: ["user", "volunteer"] } }],
+        $or: [
+          { roles: "volunteer" },
+          { roles: { $all: ["user", "volunteer"] } },
+        ],
       }).select("_id");
 
       const validVolunteerIds = validVolunteers.map((v) => v._id.toString());
@@ -1041,12 +1073,10 @@ const updateVolunteerTask = async (req, res) => {
 
 const getAllVolunteerTasks = async (req, res) => {
   try {
-    const tasks = await Task.find()
-      .sort({ createdAt: -1 })
-      .populate({
-        path: "volunteers.user",
-        select: "firstName lastName email profileImage", // Only fetch necessary fields
-      });
+    const tasks = await Task.find().sort({ createdAt: -1 }).populate({
+      path: "volunteers.user",
+      select: "firstName lastName email profileImage", // Only fetch necessary fields
+    });
 
     return res.status(200).json({
       success: true,
@@ -1066,12 +1096,16 @@ const getAllVolunteerTasks = async (req, res) => {
 
 const getSingleTask = async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id)
-      .populate("volunteers.user", "firstName phone profileImage");
+    const task = await Task.findById(req.params.id).populate(
+      "volunteers.user",
+      "firstName phone profileImage"
+    );
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
     }
-    res.status(200).json({success: true, message:"Task By ID Fetched", task });
+    res
+      .status(200)
+      .json({ success: true, message: "Task By ID Fetched", task });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
@@ -1083,13 +1117,20 @@ const deleteVolunteerTask = async (req, res) => {
 
     // Validate taskId
     if (!taskId || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
-      return res.status(400).json({ success: false, message: "Invalid task ID format." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid task ID format." });
     }
 
     // Find existing task
-    const existingTask = await Task.findById(taskId).populate("volunteers.user", "firstName lastName email");
+    const existingTask = await Task.findById(taskId).populate(
+      "volunteers.user",
+      "firstName lastName email"
+    );
     if (!existingTask) {
-      return res.status(404).json({ success: false, message: "Task not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Task not found." });
     }
 
     // Notify assigned volunteers
@@ -1180,7 +1221,8 @@ const getUserById = async (req, res) => {
 const updateUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, phone, email, profileImage, isActive } = req.body;
+    const { firstName, lastName, phone, email, profileImage, isActive } =
+      req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ message: "Invalid user ID" });
@@ -1196,7 +1238,7 @@ const updateUserById = async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (email) user.email = email;
-    
+
     if (typeof isActive !== "undefined") {
       user.isActive = isActive;
     }
@@ -1299,8 +1341,10 @@ const toggleUserStatus = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-     // ✅ Notify the dealer
-    const message = `Your user account has been ${isActive ? "activated" : "deactivated"}.`;
+    // ✅ Notify the dealer
+    const message = `Your user account has been ${
+      isActive ? "activated" : "deactivated"
+    }.`;
     const notification = await Notification.create({
       userId: user._id,
       message,
@@ -1391,7 +1435,8 @@ const updateDealerById = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { firstName, lastName, phone, email, profileImage,isActive } = req.body;
+    const { firstName, lastName, phone, email, profileImage, isActive } =
+      req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ message: "Invalid dealer ID" });
@@ -1510,8 +1555,10 @@ const toggleDealerStatus = async (req, res) => {
       return res.status(404).json({ message: "Dealer not found" });
     }
 
-     // ✅ Notify the dealer
-    const message = `Your dealer account has been ${isActive ? "activated" : "deactivated"}.`;
+    // ✅ Notify the dealer
+    const message = `Your dealer account has been ${
+      isActive ? "activated" : "deactivated"
+    }.`;
     const notification = await Notification.create({
       userId: dealer._id,
       message,
@@ -1878,47 +1925,44 @@ const shelterToggle = async (req, res) => {
         .json({ success: false, message: "Shelter not found" });
     }
 
-       const io = getIO();
-    const message = `Shelter "${shelter.name}" has been ${isActive ? "activated ✅" : "deactivated ❌"}.`;
+    const io = getIO();
+    const message = `Shelter "${shelter.name}" has been ${
+      isActive ? "activated ✅" : "deactivated ❌"
+    }`;
 
-    // ✅ Notify all dealers
+    // Find all dealer users
     const dealers = await User.find({ roles: "dealer" });
 
-   const notificationPromises = dealers.map(async (dealer) => {
-  const notification = await Notification.create({
-    userId: dealer._id,
-    message,
-    metadata: {
-      shelterId: shelter._id,
-      shelterName: shelter.name,
-      status: isActive ? "active" : "inactive",
-    },
-  });
+    // Create and send notifications
+    for (const dealer of dealers) {
+      const notification = await Notification.create({
+        userId: dealer._id,
+        message,
+        metadata: {
+          shelterId: shelter._id,
+          shelterName: shelter.name,
+          status: isActive ? "active" : "inactive",
+        },
+      });
 
- 
+      // Emit only if dealer is connected
+      io.to(dealer._id.toString()).emit("newNotification", {
+        message,
+        notificationId: notification._id,
+      });
+    }
 
-  return notification; // ✅ now returns a value
-});
-
-   await Promise.all(notificationPromises)
-
-   dealers.forEach((dealer) => {
-  for (let [id, socket] of io.of("/").sockets) {
-    io.to(dealer._id.toString()).emit("newNotification", {
-    message,
-    notificationId: notificationPromises._id,
-  });
-  }
-});
-
-   console.log(await Promise.all(notificationPromises));
-
-    res.json({ success: true, message: "Shelter status updated", shelter });
+    return res.json({
+      success: true,
+      message: "Shelter status updated and notifications sent",
+      shelter,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Error in shelterToggle:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 const deleteShelter = async (req, res) => {
   try {
@@ -2046,7 +2090,7 @@ const assignVolunteer = async (req, res) => {
       { new: true }
     ).populate("assignedVolunteer", "firstName lastName email");
 
-      const io = getIO();
+    const io = getIO();
 
     // ✅ Notify the Volunteer
     const volunteerMsg = `You've been assigned to a Gaudaan pickup: ${updated.animalType}`;
@@ -2175,15 +2219,18 @@ const getGaudaanCR = async (req, res) => {
   }
 };
 
-
 //contacts
 const getContacts = async (req, res) => {
   try {
     const contacts = await Contact.find();
     if (!contacts) {
-      return res.status(404).json({ success: false, message: "Contact not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Contact not found" });
     }
-    res.status(200).json({ success: true, message: "Contacts fetched",contacts });
+    res
+      .status(200)
+      .json({ success: true, message: "Contacts fetched", contacts });
   } catch (err) {
     res.status(500).json({ success: false, message: "Server error" });
   }
@@ -2193,14 +2240,15 @@ const deleteContact = async (req, res) => {
   try {
     const contact = await Contact.findByIdAndDelete(req.params.id);
     if (!contact) {
-      return res.status(404).json({ success: false, message: "Contact not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Contact not found" });
     }
     res.status(200).json({ success: true, message: "Contact deleted" });
   } catch (err) {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
 
 module.exports = {
   getAdmin,
