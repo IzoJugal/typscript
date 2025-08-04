@@ -596,28 +596,64 @@ const assignVolunteerRole = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    //Not combine
     if (user.roles.includes("dealer") || user.roles.includes("admin")) {
       return res.status(400).json({
-        message:
-          "Cannot combine 'volunteer' role to dealer or admin users only user",
+        message: "Cannot combine 'volunteer' role to dealer or admin users only user",
       });
     }
 
-    // Add "volunteer" to roles if not present
+    let newlyAdded = false;
+
     if (!user.roles.includes("volunteer")) {
       user.roles.push("volunteer");
       await user.save();
+      newlyAdded = true;
     }
 
-    res
-      .status(200)
-      .json({ success: true, message: "Volunteer role assigned", user });
+
+    // ✅ Notify all admins if role added
+    if (newlyAdded) {
+      const admins = await User.find({ roles: "admin" }, "_id notificationsEnabled");
+      const adminIds = admins.map((admin) => admin._id.toString());
+
+      const message = `${user.firstName || "A user"} joined as a volunteer.`;
+
+      // Step 1: Store notifications in DB
+      const notificationPromises = adminIds.map((adminId) =>
+        Notification.create({ userId: adminId, message })
+      );
+      const createdNotifications = await Promise.all(notificationPromises);
+
+      // Step 2: Emit only to admins with notifications enabled
+      const io = getIO();
+      for (let i = 0; i < admins.length; i++) {
+        const admin = admins[i];
+        if (!admin.notificationsEnabled) continue;
+
+        const sockets = await io.in(admin._id.toString()).fetchSockets();
+        sockets.forEach((socket) => {
+          if (socket.data.notificationsEnabled) {
+            socket.emit("newNotification", {
+              message,
+              notificationId: createdNotifications[i]._id,
+            });
+          }
+        });
+      }
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: "Volunteer role assigned",
+      user,
+    });
   } catch (err) {
     console.error("Assign role error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 

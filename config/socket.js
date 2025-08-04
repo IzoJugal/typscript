@@ -11,8 +11,13 @@ function init(server) {
   });
 
   io.on("connection", (socket) => {
-    socket.on("register", (userId) => {
+    socket.on("register", ({ userId, notificationsEnabled }) => {
       socket.join(userId);
+      socket.data.userId = userId;
+       if (userId) {
+      socket.data.notificationsEnabled = user.notificationsEnabled ?? true;
+    }
+      socket.data.notificationsEnabled = notificationsEnabled; 
     });
 
     socket.on("disconnect", () => {});
