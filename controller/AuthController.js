@@ -1107,12 +1107,10 @@ const getMyAssignedTasks = async (req, res) => {
 
     // Validate roles
     if (!Array.isArray(roles) || !roles.includes("volunteer")) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Access denied: Volunteer role required.",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: Volunteer role required.",
+      });
     }
 
     // Find tasks where user is in volunteers array
@@ -1851,7 +1849,7 @@ const gaudaanForm = async (req, res) => {
     if (req.io) {
       admins.forEach((admin) => {
         req.io.to(admin._id.toString()).emit("newNotification", {
-          message: `🪔 New Gaudaan submitted by ${gaudaan.name}`
+          message: `🪔 New Gaudaan submitted by ${gaudaan.name}`,
         });
       });
     }
@@ -1973,7 +1971,6 @@ const updategaudaanStatus = async (req, res) => {
       return res.status(404).json({ message: "Donation not found" });
     }
 
-    // If status requires shelter info
     if (["shelter", "dropped"].includes(status)) {
       if (!shelterId) {
         return res
@@ -1981,7 +1978,6 @@ const updategaudaanStatus = async (req, res) => {
           .json({ message: "shelterId is required for this status" });
       }
 
-      // Optionally: Check if shelterId exists in the database
       const shelterExists = await Shelter.findById(shelterId);
       if (!shelterExists) {
         return res.status(404).json({ message: "Shelter not found" });
@@ -2000,11 +1996,53 @@ const updategaudaanStatus = async (req, res) => {
 
     const updated = await donation.save();
 
+    // 📣 Notification Messages
+    const statusMessages = {
+      assigned: "Donation assigned to a volunteer.",
+      picked_up: "Donation picked up by volunteer.",
+      shelter: "Donation reached the shelter.",
+      dropped: "Donation successfully dropped.",
+      rejected: "Donation has been rejected.",
+      unassigned: "Donation is unassigned.",
+    };
+
+    const donorMessage = statusMessages[status] || `Donation status is now '${status}'.`;
+
+    // ✅ Notify Donor
+    if (donation.donor?._id) {
+      await Notification.create({
+        userId: donation.donor?._id,
+        title: "Update on Your Donation",
+        message: donorMessage,
+        metadata: {
+          donationId: donation._id,
+          newStatus: status,
+        },
+      });
+    }
+
+    // ✅ Notify Admin(s)
+    const admins = await User.find({ roles: { $in: ["admin"] } }).select("_id");
+    const adminNotifications = admins.map((admin) =>
+      Notification.create({
+        userId: admin._id,
+        title: `Donation Status Updated by Volunteer`,
+        message: `Donation ${donation.animalType} is now '${status}'.`,
+        metadata: {
+          donationId: donation._id,
+          changedBy: userId,
+          newStatus: status,
+        },
+      })
+    );
+    await Promise.all(adminNotifications);
+
     res.status(200).json({
       success: true,
-      message: "Status updated successfully",
+      message: "Status updated and notifications sent",
       updated,
     });
+
   } catch (err) {
     console.error("Status update error:", err);
     res.status(500).json({
@@ -2014,6 +2052,7 @@ const updategaudaanStatus = async (req, res) => {
     });
   }
 };
+
 
 // Rycycaler
 const getRecyclers = async (req, res) => {
