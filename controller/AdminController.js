@@ -15,6 +15,7 @@ const bcrypt = require("bcryptjs");
 const path = require("path");
 const Notification = require("../Model/NotificationsModel");
 const { getIO } = require("../config/socket");
+const { log } = require("console");
 
 let gfs;
 const conn = mongoose.connection;
@@ -1877,16 +1878,40 @@ const shelterToggle = async (req, res) => {
         .json({ success: false, message: "Shelter not found" });
     }
 
-    const io = req.app.get("io");
-    io.emit("shelter-status-updated", {
+       const io = getIO();
+    const message = `Shelter "${shelter.name}" has been ${isActive ? "activated ✅" : "deactivated ❌"}.`;
+
+    // ✅ Notify all dealers
+    const dealers = await User.find({ roles: "dealer" });
+
+   const notificationPromises = dealers.map(async (dealer) => {
+  const notification = await Notification.create({
+    userId: dealer._id,
+    message,
+    metadata: {
       shelterId: shelter._id,
-      name: shelter.name,
-      isActive: shelter.isActive,
-      timestamp: new Date(),
-      message: `Shelter "${shelter.name}" is now ${
-        shelter.isActive ? "Active ✅" : "Inactive ❌"
-      }`,
-    });
+      shelterName: shelter.name,
+      status: isActive ? "active" : "inactive",
+    },
+  });
+
+ 
+
+  return notification; // ✅ now returns a value
+});
+
+   await Promise.all(notificationPromises)
+
+   dealers.forEach((dealer) => {
+  for (let [id, socket] of io.of("/").sockets) {
+    io.to(dealer._id.toString()).emit("newNotification", {
+    message,
+    notificationId: notificationPromises._id,
+  });
+  }
+});
+
+   console.log(await Promise.all(notificationPromises));
 
     res.json({ success: true, message: "Shelter status updated", shelter });
   } catch (err) {
@@ -1935,6 +1960,7 @@ const getGaudaanSubmissions = async (req, res) => {
     })
       .populate("assignedVolunteer", "firstName lastName phone profileImage")
       .populate("shelterId", "name address phone profileImage")
+      .populate("donor", "firstName LastName phone profileImage")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
