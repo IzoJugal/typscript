@@ -610,23 +610,6 @@ const assignVolunteerRole = async (req, res) => {
       await user.save();
     }
 
-     // 🔔 Notify all admins
-      const admins = await User.find({ roles: "admin" });
-      const notifications = admins.map((admin) => ({
-        user: admin._id,
-        type: "volunteer",
-        title: "New Volunteer Assigned",
-        message: `${user.firstName || "A user"} is now a volunteer.`,
-      }));
-      await Notification.insertMany(notifications);
-
-      // Optional: Emit socket.io event
-      io.to(admin._id.toString()).emit("notification", {
-        title: "New Volunteer Assigned",
-        message: `${user.firstName} is now a volunteer.`,
-      });
-    
-
     res
       .status(200)
       .json({ success: true, message: "Volunteer role assigned", user });

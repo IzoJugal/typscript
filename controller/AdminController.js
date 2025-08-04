@@ -1179,7 +1179,7 @@ const getUserById = async (req, res) => {
 const updateUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, phone, email, profileImage } = req.body;
+    const { firstName, lastName, phone, email, profileImage, isActive } = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ message: "Invalid user ID" });
@@ -1195,6 +1195,10 @@ const updateUserById = async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (email) user.email = email;
+    
+    if (typeof isActive !== "undefined") {
+      user.isActive = isActive;
+    }
 
     if (req.files && req.files.profileImage && req.files.profileImage[0]) {
       const file = req.files.profileImage[0];
@@ -1386,7 +1390,7 @@ const updateDealerById = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { firstName, lastName, phone, email, profileImage } = req.body;
+    const { firstName, lastName, phone, email, profileImage,isActive } = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ message: "Invalid dealer ID" });
@@ -1402,6 +1406,10 @@ const updateDealerById = async (req, res) => {
     if (lastName) dealer.lastName = lastName;
     if (phone) dealer.phone = phone;
     if (email) dealer.email = email;
+
+    if (typeof isActive !== "undefined") {
+      user.isActive = isActive;
+    }
 
     if (req.files && req.files.profileImage && req.files.profileImage[0]) {
       const file = req.files.profileImage[0];
