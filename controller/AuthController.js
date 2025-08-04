@@ -1839,9 +1839,8 @@ const gaudaanForm = async (req, res) => {
 
     const notificationPromises = admins.map((admin) => {
       const notification = new Notification({
-        user: admin._id,
+        userId: admin._id,
         message: `🪔 New Gaudaan submitted by ${gaudaan.name}`,
-        link: `/admin/gaudaan/${gaudaan._id}`, // adjust route as per your frontend
       });
       return notification.save();
     });
