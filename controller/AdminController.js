@@ -1930,13 +1930,13 @@ const shelterToggle = async (req, res) => {
       isActive ? "activated ✅" : "deactivated ❌"
     }`;
 
-    // Find all dealer users
-    const dealers = await User.find({ roles: "dealer" });
+    // Find all volunteer users
+    const volunteers = await User.find({ roles: { $all: ["user", "volunteer"] } });
 
     // Create and send notifications
-    for (const dealer of dealers) {
+    for (const volunteer of volunteers) {
       const notification = await Notification.create({
-        userId: dealer._id,
+        userId: volunteer._id,
         message,
         metadata: {
           shelterId: shelter._id,
@@ -1945,8 +1945,8 @@ const shelterToggle = async (req, res) => {
         },
       });
 
-      // Emit only if dealer is connected
-      io.to(dealer._id.toString()).emit("newNotification", {
+      // Emit only if volunteer is connected
+      io.to(volunteer._id.toString()).emit("newNotification", {
         message,
         notificationId: notification._id,
       });
@@ -1962,7 +1962,6 @@ const shelterToggle = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
 
 const deleteShelter = async (req, res) => {
   try {
