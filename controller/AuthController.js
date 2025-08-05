@@ -625,7 +625,7 @@ const assignVolunteerRole = async (req, res) => {
 
       // Step 1: Store notifications in DB
       const notificationPromises = adminIds.map((adminId) =>
-        Notification.create({ userId: adminId, message })
+        Notification.create({ userId: adminId, message, link:"/users" })
       );
       const createdNotifications = await Promise.all(notificationPromises);
 
@@ -641,6 +641,7 @@ const assignVolunteerRole = async (req, res) => {
             socket.emit("newNotification", {
               message,
               notificationId: createdNotifications[i]._id,
+              link: createdNotifications.link
             });
           }
         });
@@ -895,7 +896,7 @@ const createDonation = async (req, res) => {
     const message = `New donation created: ${scrapType}`;
 
     const notificationPromises = adminIds.map((adminId) =>
-      Notification.create({ userId: adminId, message })
+      Notification.create({ userId: adminId, message,link: `/pickups/${donation._id}` })
     );
     const createdNotifications = await Promise.all(notificationPromises);
 
@@ -905,6 +906,7 @@ const createDonation = async (req, res) => {
       io.to(adminId).emit("newNotification", {
         message,
         notificationId: createdNotifications[index]._id,
+        link: createdNotifications.link
       });
     });
 
@@ -1514,10 +1516,12 @@ const updateDonationStatus = async (req, res) => {
         userId: donorId,
         message,
         type: "donation-status",
+        link: "/donationdetails"
       });
       io.to(donorId).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
+        link: notification.link
       });
     }
 
@@ -1530,10 +1534,12 @@ const updateDonationStatus = async (req, res) => {
         userId: admin._id.toString(),
         message: adminMessage,
         type: "dealer-update",
+        link: `/pickups/${donation._id}`
       });
       io.to(admin._id.toString()).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
+        link: notification.link
       });
     }
 
@@ -1607,10 +1613,12 @@ const addPriceandweight = async (req, res) => {
         userId: donorId,
         message,
         type: "donation-update",
+        link: "/donationdetails"
       });
       io.to(donorId).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
+        link: notification._id
       });
     }
 
@@ -1623,10 +1631,12 @@ const addPriceandweight = async (req, res) => {
         userId: admin._id.toString(),
         message: adminMessage,
         type: "dealer-update",
+        link : `/pickups/${donation._id}`
       });
       io.to(admin._id.toString()).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
+        link: notification.link
       });
 
       return res.status(200).json({

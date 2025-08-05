@@ -643,12 +643,14 @@ const assignDealer = async (req, res) => {
     const dealerNotification = await Notification.create({
       userId: resolvedDealerId,
       message: dealerMessage,
+      link:`/pickup/${donation._id}`
     });
 
     // Notify Donor
     const donorNotification = await Notification.create({
       userId: donation.donor._id,
       message: donorMessage,
+      link:`/donationdetails`,
     });
 
     // Emit Socket Events
@@ -656,11 +658,13 @@ const assignDealer = async (req, res) => {
     io.to(resolvedDealerId.toString()).emit("newNotification", {
       message: dealerMessage,
       notificationId: dealerNotification._id,
+      link: dealerNotification.link,
     });
 
     io.to(donation.donor._id.toString()).emit("newNotification", {
       message: donorMessage,
       notificationId: donorNotification._id,
+      link: donorNotification.link,
     });
 
     res.status(200).json({
@@ -856,14 +860,13 @@ const createVolunteerTask = async (req, res) => {
     await newTask.save();
 
     // Create and send notifications
-    const Notification = mongoose.model("Notification");
     const io = getIO();
 
     for (const volId of validVolunteerIds) {
       const notif = await Notification.create({
         userId: volId,
         message: `You have been assigned a new task: ${taskTitle}`,
-         link: `/tasksdetails/${newTask._id}`,
+         link: `/tasksdetails`,
       });
 
       io.to(volId.toString()).emit("newNotification", {
@@ -871,7 +874,6 @@ const createVolunteerTask = async (req, res) => {
         notificationId: notif._id,
         link: notif.link,
       });
-      console.log("link",notif.link);
       
     }
 
@@ -938,10 +940,12 @@ const updateVolunteerTask = async (req, res) => {
           const notif = await Notification.create({
             userId: vol.user,
             message: `Task "${existingTask.taskTitle}" has been ${status}.`,
+            link: "/tasksdetails"
           });
           io.to(vol.user.toString()).emit("newNotification", {
             message: notif.message,
             notificationId: notif._id,
+            link: notif.link,
           });
         }
       }
@@ -1044,10 +1048,12 @@ const updateVolunteerTask = async (req, res) => {
           const notif = await Notification.create({
             userId: volId,
             message: `You have been assigned a new task: ${existingTask.taskTitle}`,
+            link: "/tasksdetails"
           });
           io.to(volId.toString()).emit("newNotification", {
             message: notif.message,
             notificationId: notif._id,
+            link: notif.link
           });
         }
       }
@@ -1352,12 +1358,14 @@ const toggleUserStatus = async (req, res) => {
     const notification = await Notification.create({
       userId: user._id,
       message,
+      link: "/settings"
     });
 
     const io = getIO();
     io.to(user._id.toString()).emit("newNotification", {
       message,
       notificationId: notification._id,
+      link: notification.link
     });
 
     res.status(200).json({
@@ -1566,12 +1574,14 @@ const toggleDealerStatus = async (req, res) => {
     const notification = await Notification.create({
       userId: dealer._id,
       message,
+      link:"/settings"
     });
 
     const io = getIO();
     io.to(dealer._id.toString()).emit("newNotification", {
       message,
       notificationId: notification._id,
+      link: notification.link
     });
 
     res.status(200).json({
@@ -1947,12 +1957,14 @@ const shelterToggle = async (req, res) => {
           shelterName: shelter.name,
           status: isActive ? "active" : "inactive",
         },
+        link: "/settings"
       });
 
       // Emit only if volunteer is connected
       io.to(volunteer._id.toString()).emit("newNotification", {
         message,
         notificationId: notification._id,
+        link: notification.link
       });
     }
 
@@ -2100,10 +2112,12 @@ const assignVolunteer = async (req, res) => {
     const volunteerNotification = await Notification.create({
       userId: volunteerId,
       message: volunteerMsg,
+      link: "/assignedgaudaan"
     });
     io.to(volunteerId.toString()).emit("newNotification", {
       message: volunteerMsg,
       notificationId: volunteerNotification._id,
+      link: volunteerNotification.link
     });
 
     // ✅ Notify the Donor (if exists)
@@ -2112,10 +2126,12 @@ const assignVolunteer = async (req, res) => {
       const donorNotification = await Notification.create({
         userId: gaudaan.donor._id,
         message: donorMsg,
+        link: "/gaudaan-details"
       });
       io.to(gaudaan.donor._id.toString()).emit("newNotification", {
         message: donorMsg,
         notificationId: donorNotification._id,
+        link: donorNotification.link
       });
     }
     res.status(200).json({
