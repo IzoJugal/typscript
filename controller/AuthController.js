@@ -1390,7 +1390,7 @@ const getDonationById = async (req, res) => {
 
     // Find donation by ID and dealer match
     const donation = await Donation.findOne({ _id: id, dealer: userId })
-      .populate("donor", "firstName lastName email phone")
+      .populate("donor", "firstName lastName email phone profileImage")
       .populate("dealer", "firstName email profileImage");
 
     if (!donation) {
