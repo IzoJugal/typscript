@@ -863,12 +863,16 @@ const createVolunteerTask = async (req, res) => {
       const notif = await Notification.create({
         userId: volId,
         message: `You have been assigned a new task: ${taskTitle}`,
+         link: `/tasksdetails/${newTask._id}`,
       });
 
       io.to(volId.toString()).emit("newNotification", {
         message: notif.message,
         notificationId: notif._id,
+        link: notif.link,
       });
+      console.log("link",notif.link);
+      
     }
 
     return res.status(201).json({
