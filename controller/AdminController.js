@@ -2039,8 +2039,8 @@ const getGaudaanSubmissions = async (req, res) => {
 const getGaudaanById = async (req, res) => {
   try {
     const gaudaan = await Gaudaan.findById(req.params.id)
-      .populate("donor", "firstName LastName phone profileImage")
-      .populate("assignedVolunteer", "firstName LastName phone profileImage");
+      .populate("donor", "firstName lastName phone profileImage")
+      .populate("assignedVolunteer", "firstName lastName phone profileImage");
 
     if (!gaudaan) {
       return res.status(404).json({ message: "Gaudaan not found" });
