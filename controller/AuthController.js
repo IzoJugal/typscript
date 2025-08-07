@@ -1724,23 +1724,27 @@ const getSliders = async (req, res) => {
 
 const logoGet = async (req, res) => {
   try {
-    const logo = await Logo.findOne().sort({ createdAt: -1 });
-    if (!logo) {
-      return res.status(404).json({ message: "No logo found" });
-    }
-    res.status(200).json({
-      success: true,
-      message: "Logo fetched successfully",
-      logo,
-    });
-  } catch (err) {
-    console.error("Error fetching logo:", err);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching logo",
-      error: err.message,
-    });
-  }
+     const logo = await Logo.findOne();  
+     if (!logo) {
+       return res.status(404).json({ message: "Logo not found" });
+     }
+ 
+     const file = await gfs.find({ filename: logo.filename }).toArray();
+     if (!file || file.length === 0) {
+       return res.status(404).json({ message: "File not found in GridFS" });
+     }
+ 
+     const fileId = file[0]._id;  
+     const readStream = gfs.openDownloadStream(fileId); 
+     
+     res.set("Content-Type", file[0].contentType);
+ 
+     readStream.pipe(res);
+     
+   } catch (err) {
+     console.error("Error fetching logo:", err);
+     res.status(500).json({ message: "Error fetching logo", error: err.message });
+   }
 };
 
 //Gaudaan

@@ -1,9 +1,9 @@
-// models/Logo.js
 const mongoose = require("mongoose");
 
 const logoSchema = new mongoose.Schema({
-  url: String,
-  title: String,
+  filename: { type: String, required: true }, // Filename for the logo in GridFS
+  fileId: { type: mongoose.Schema.Types.ObjectId, required: true }, // Reference to the GridFS file ID
+  title: { type: String, default: "Logo" }, // Title of the logo
   createdAt: {
     type: Date,
     default: Date.now,
