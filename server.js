@@ -44,6 +44,7 @@ connectDB()
     app.use("/admin", adminRoute);
     app.use("/contact", contactRoute);
     app.use("/notifications", require("./route/NotificationRoute"));
+    app.use("/logo", require("./route/LogoUpload"));
 
     // 🧪 Root Health Check
     app.get("/", (req, res) => {
