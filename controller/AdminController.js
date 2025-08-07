@@ -2312,5 +2312,4 @@ module.exports = {
   getGaudaanCR,
   getContacts,
   deleteContact,
-  getLogo,
 };
