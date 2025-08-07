@@ -1117,7 +1117,7 @@ const getMyAssignedTasks = async (req, res) => {
 
     // Find tasks where user is in volunteers array
     const tasks = await VolunteerTask.find({ "volunteers.user": userId })
-      .populate("volunteers.user", "firstName lastName email")
+      .populate("volunteers.user", "firstName lastName email phone profileImage")
       .lean();
 
     if (!tasks || tasks.length === 0) {
@@ -1440,7 +1440,7 @@ const getPickupDonations = async (req, res) => {
     const pickupDonations = await Donation.find({
       status: { $in: pickupStatuses },
       dealer: userId,
-    }).populate("donor", "firstName lastName email profileImage");
+    }).populate("donor", "firstName lastName email phone profileImage");
 
     return res.status(200).json({
       success: true,
@@ -1680,8 +1680,8 @@ const getHistory = async (req, res) => {
       status: donatedStatus,
       dealer: userId,
     })
-      .populate("donor", "firstName lastName email profileImage")
-      .populate("recycler", "firstName lastName email profileImage");
+      .populate("donor", "firstName lastName email phone profileImage")
+      .populate("recycler", "firstName lastName email phone profileImage");
 
     return res.status(200).json({
       success: true,
@@ -2169,7 +2169,7 @@ const getRecyclerDonations = async (req, res) => {
       recycler: userId,
       status: { $in: ["processed", "donated"] },
     })
-      .populate("donor", "firstName lastName email phone")
+      .populate("donor", "firstName lastName email phone profileImage")
       .populate("dealer", "firstName email")
       .sort({ createdAt: -1 });
 
@@ -2197,8 +2197,8 @@ const getRecycleDonations = async (req, res) => {
       recycler: userId,
       status: "recycled",
     })
-      .populate("donor", "firstName lastName email phone")
-      .populate("dealer", "firstName lastName email")
+      .populate("donor", "firstName lastName email phone profileImage")
+      .populate("dealer", "firstName lastName email phone profileImage")
       .sort({ updatedAt: -1 });
 
     res.status(200).json({
