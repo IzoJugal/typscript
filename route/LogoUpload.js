@@ -75,7 +75,7 @@ router.post("/upload", isAdmin, upload.single("logo"), async (req, res) => {
         console.timeEnd("upload");
         res.status(200).json({
           message: "Logo uploaded successfully",
-          logoUrl: `${import.meta.env.VITE_BACK_URL}/logo`,
+          logoUrl: `${process.env.VITE_BACK_URL}/logo`,
         });
       } catch (err) {
         console.error("Error saving metadata:", err);
