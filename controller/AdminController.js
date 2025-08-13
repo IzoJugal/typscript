@@ -1466,7 +1466,7 @@ const updateDealerById = async (req, res) => {
     if (email) dealer.email = email;
 
     if (typeof isActive !== "undefined") {
-      user.isActive = isActive;
+      dealer.isActive = isActive;
     }
 
     if (req.files && req.files.profileImage && req.files.profileImage[0]) {
