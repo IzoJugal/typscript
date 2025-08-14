@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpires: Date,
     roles: {
       type: [String],
-      enum: ["user", "volunteer", "admin", "dealer","recycler"],
+      enum: ["user", "volunteer", "admin", "dealer", "recycler"],
       default: ["user"],
       validate: {
         validator: function (roles) {
@@ -33,7 +33,13 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-     notificationsEnabled: { type: Boolean, default: true }, 
+    otp: {
+      type: String,
+    },
+    otpExpires: {
+      type: Date,
+    },
+    notificationsEnabled: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

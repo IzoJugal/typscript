@@ -15,6 +15,7 @@ const { log } = require("console");
 const { Readable } = require("stream");
 const { getIO } = require("../config/socket");
 const Notification = require("../Model/NotificationsModel");
+const nodemailer = require("nodemailer");
 
 let gfs;
 const conn = mongoose.connection;
@@ -390,6 +391,141 @@ const resetPassword = async (req, res) => {
   res
     .status(200)
     .json({ success: true, message: "Password reset successfully" });
+};
+
+// App Password Reset
+const sendOTPapp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is required" });
+    }
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpires = Date.now() + 5 * 60 * 1000; // 5 minutes
+    await user.save();
+
+    // SMTP Transporter for smtp.overlay.com
+    const transporter = nodemailer.createTransport({
+      host: "smtp-relay.brevo.com", // change to your SMTP host
+      port: 587, // or 465 for SSL
+      secure: false, // true for port 465
+      auth: {
+        user: "93c459002@smtp-brevo.com", // your SMTP username
+        pass: "gGDT17w4S2PazEfj", // your SMTP password
+      },
+    });
+
+    await transporter.sendMail({
+      from: `"No Reply" <${"support@gauabhayaranyam.com"}>`,
+      to: email,
+      subject: "Your OTP Code",
+      text: `Your OTP is ${otp}. It will expire in 5 minutes.`,
+    });
+
+    return res.json({ success: true, message: "OTP sent successfully" });
+  } catch (error) {
+    console.error("OTP Send Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+const otpVerify = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email and OTP are required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    if (String(user.otp) !== String(otp)) {
+      return res.status(400).json({ success: false, message: "Invalid OTP" });
+    }
+
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({ success: false, message: "OTP expired" });
+    }
+
+    // Clear OTP
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    return res.json({ success: true, message: "OTP verified successfully" });
+  } catch (error) {
+    console.error("OTP Verify Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Reset Password
+const resetPasswordApp = async (req, res) => {
+  try {
+        const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({ success: false, message: "Email and new password are required" });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({ success: false, message: "New password is required" });
+    }
+
+    // Password validation
+    const minLength = 8;
+    if (newPassword.length < minLength) {
+      return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({ success: false, message: "Must include at least one uppercase letter" });
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      return res.status(400).json({ success: false, message: "Must include at least one lowercase letter" });
+    }
+    if (!/\d/.test(newPassword)) {
+      return res.status(400).json({ success: false, message: "Must include at least one number" });
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+      return res.status(400).json({ success: false, message: "Must include at least one special character" });
+    }
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "User not found or not authorized" });
+    }
+
+  const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    return res.json({ success: true, message: "Password reset successfully" });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
 
 // Fetch Users
@@ -2279,6 +2415,9 @@ module.exports = {
   signInAuth,
   forgotPassword,
   resetPassword,
+  sendOTPapp,
+  otpVerify,
+  resetPasswordApp,
   fetchUsers,
   getUserProfile,
   updateUserProfile,

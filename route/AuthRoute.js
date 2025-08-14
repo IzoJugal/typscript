@@ -54,6 +54,14 @@ router.route("/forgot-password").post(controller.forgotPassword);
 
 router.route("/reset-password/:token").post(controller.resetPassword);
 
+// Appp Reset Password
+router.post("/otp-send", controller.sendOTPapp);
+
+router.post("/otp-verify", controller.otpVerify)
+
+router.patch("/reset-password", controller.resetPasswordApp);
+
+
 //Users
 router.route("/auth").get(authMiddleware, controller.fetchUsers);
 
