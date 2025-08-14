@@ -625,7 +625,7 @@ const assignVolunteerRole = async (req, res) => {
 
       // Step 1: Store notifications in DB
       const notificationPromises = adminIds.map((adminId) =>
-        Notification.create({ userId: adminId, message, link:"/users" })
+        Notification.create({ userId: adminId, message, link: "/users" })
       );
       const createdNotifications = await Promise.all(notificationPromises);
 
@@ -641,7 +641,7 @@ const assignVolunteerRole = async (req, res) => {
             socket.emit("newNotification", {
               message,
               notificationId: createdNotifications[i]._id,
-              link: createdNotifications.link
+              link: createdNotifications.link,
             });
           }
         });
@@ -896,7 +896,11 @@ const createDonation = async (req, res) => {
     const message = `New donation created: ${scrapType}`;
 
     const notificationPromises = adminIds.map((adminId) =>
-      Notification.create({ userId: adminId, message,link: `/pickups/${donation._id}` })
+      Notification.create({
+        userId: adminId,
+        message,
+        link: `/pickups/${donation._id}`,
+      })
     );
     const createdNotifications = await Promise.all(notificationPromises);
 
@@ -906,7 +910,7 @@ const createDonation = async (req, res) => {
       io.to(adminId).emit("newNotification", {
         message,
         notificationId: createdNotifications[index]._id,
-        link: createdNotifications.link
+        link: createdNotifications.link,
       });
     });
 
@@ -1117,7 +1121,10 @@ const getMyAssignedTasks = async (req, res) => {
 
     // Find tasks where user is in volunteers array
     const tasks = await VolunteerTask.find({ "volunteers.user": userId })
-      .populate("volunteers.user", "firstName lastName email phone profileImage")
+      .populate(
+        "volunteers.user",
+        "firstName lastName email phone profileImage"
+      )
       .lean();
 
     if (!tasks || tasks.length === 0) {
@@ -1129,9 +1136,10 @@ const getMyAssignedTasks = async (req, res) => {
 
     // Add user's volunteer status to each task
     const tasksWithVolunteerStatus = tasks.map((task) => {
-      const volunteer = task.volunteers.find(
-        (vol) => vol.user._id.toString() === userId
-      );
+      const volunteer = task.volunteers.find((vol) => {
+        return vol.user && vol.user._id && vol.user._id.toString() === userId;
+      });
+
       return {
         ...task,
         myVolunteerStatus: volunteer ? volunteer.status : "pending",
@@ -1516,12 +1524,12 @@ const updateDonationStatus = async (req, res) => {
         userId: donorId,
         message,
         type: "donation-status",
-        link: "/donationdetails"
+        link: "/donationdetails",
       });
       io.to(donorId).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
-        link: notification.link
+        link: notification.link,
       });
     }
 
@@ -1534,12 +1542,12 @@ const updateDonationStatus = async (req, res) => {
         userId: admin._id.toString(),
         message: adminMessage,
         type: "dealer-update",
-        link: `/pickups/${donation._id}`
+        link: `/pickups/${donation._id}`,
       });
       io.to(admin._id.toString()).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
-        link: notification.link
+        link: notification.link,
       });
     }
 
@@ -1613,12 +1621,12 @@ const addPriceandweight = async (req, res) => {
         userId: donorId,
         message,
         type: "donation-update",
-        link: "/donationdetails"
+        link: "/donationdetails",
       });
       io.to(donorId).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
-        link: notification._id
+        link: notification._id,
       });
     }
 
@@ -1631,12 +1639,12 @@ const addPriceandweight = async (req, res) => {
         userId: admin._id.toString(),
         message: adminMessage,
         type: "dealer-update",
-        link : `/pickups/${donation._id}`
+        link: `/pickups/${donation._id}`,
       });
       io.to(admin._id.toString()).emit("newNotification", {
         message: notification.message,
         notificationId: notification._id,
-        link: notification.link
+        link: notification.link,
       });
 
       return res.status(200).json({
@@ -1724,27 +1732,28 @@ const getSliders = async (req, res) => {
 
 const logoGet = async (req, res) => {
   try {
-     const logo = await Logo.findOne();  
-     if (!logo) {
-       return res.status(404).json({ message: "Logo not found" });
-     }
- 
-     const file = await gfs.find({ filename: logo.filename }).toArray();
-     if (!file || file.length === 0) {
-       return res.status(404).json({ message: "File not found in GridFS" });
-     }
- 
-     const fileId = file[0]._id;  
-     const readStream = gfs.openDownloadStream(fileId); 
-     
-     res.set("Content-Type", file[0].contentType);
- 
-     readStream.pipe(res);
-     
-   } catch (err) {
-     console.error("Error fetching logo:", err);
-     res.status(500).json({ message: "Error fetching logo", error: err.message });
-   }
+    const logo = await Logo.findOne();
+    if (!logo) {
+      return res.status(404).json({ message: "Logo not found" });
+    }
+
+    const file = await gfs.find({ filename: logo.filename }).toArray();
+    if (!file || file.length === 0) {
+      return res.status(404).json({ message: "File not found in GridFS" });
+    }
+
+    const fileId = file[0]._id;
+    const readStream = gfs.openDownloadStream(fileId);
+
+    res.set("Content-Type", file[0].contentType);
+
+    readStream.pipe(res);
+  } catch (err) {
+    console.error("Error fetching logo:", err);
+    res
+      .status(500)
+      .json({ message: "Error fetching logo", error: err.message });
+  }
 };
 
 //Gaudaan
@@ -1927,7 +1936,10 @@ const getAssignedGaudaan = async (req, res) => {
     const assignedGaudaan = await Gaudaan.find({
       assignedVolunteer: volunteerId,
     })
-      .populate("assignedVolunteer", "firstName lastName email phone profileImage")
+      .populate(
+        "assignedVolunteer",
+        "firstName lastName email phone profileImage"
+      )
       .populate("donor", "firstName lastName phone profileImage");
 
     res.status(200).json({
@@ -2020,7 +2032,8 @@ const updategaudaanStatus = async (req, res) => {
       unassigned: "Donation is unassigned.",
     };
 
-    const donorMessage = statusMessages[status] || `Donation status is now '${status}'.`;
+    const donorMessage =
+      statusMessages[status] || `Donation status is now '${status}'.`;
 
     // ✅ Notify Donor
     if (donation.donor?._id) {
@@ -2056,7 +2069,6 @@ const updategaudaanStatus = async (req, res) => {
       message: "Status updated and notifications sent",
       updated,
     });
-
   } catch (err) {
     console.error("Status update error:", err);
     res.status(500).json({
@@ -2066,7 +2078,6 @@ const updategaudaanStatus = async (req, res) => {
     });
   }
 };
-
 
 // Rycycaler
 const getRecyclers = async (req, res) => {
