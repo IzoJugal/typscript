@@ -1,36 +1,41 @@
 {
-  "name": "backend",
+  "name": "api",
   "version": "1.0.0",
   "description": "",
-  "main": "server.js",
-  "type": "commonjs",
+  "main": "index.js",
   "scripts": {
-    "start": "node dist/server.js",
-    "dev": "nodemon server.js",
-    "build": "babel . --out-dir dist --ignore node_modules,test"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@react-native-firebase/app": "^23.0.1",
+    "@react-native-firebase/messaging": "^23.0.1",
+    "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
-    "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "gridfs-stream": "^1.1.1",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.16.5",
-    "multer": "^1.4.4",
-    "multer-gridfs-storage": "^5.0.2",
+    "firebase": "^12.1.0",
+    "firebase-admin": "^13.4.0",
+    "mongoose": "^8.17.1",
+    "multer": "^2.0.2",
     "nodemailer": "^7.0.5",
-    "socket.io": "^4.8.1",
-    "twilio": "^5.7.1",
-    "winston": "^3.17.0"
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "@babel/cli": "^7.28.0",
-    "@babel/core": "^7.28.0",
-    "@babel/preset-env": "^7.28.0",
-    "nodemon": "^3.1.10"
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/mongoose": "^5.11.97",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.2.1",
+    "@types/nodemailer": "^6.4.17",
+    "jsonwebtoken": "^9.0.2",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.2"
   }
 }
