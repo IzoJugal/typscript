@@ -21,15 +21,17 @@ interface ActivityLog {
 }
 
 export interface IDonation extends Document {
+  _id: Types.ObjectId;
   donor: Types.ObjectId | IUser;
   scrapType: string;
   phone: string;
   description: string;
-  addressLine1?: string;
+  addressLine1: string;
   addressLine2?: string;
-  pincode?: number;
-  city?: string;
-  country?: string;
+  pincode: number;
+  city: string;
+  district: string;
+  country: string;
   pickupDate: Date;
   pickupTime: string;
   images: Image[];
@@ -85,19 +87,19 @@ const activityLogSchema = new Schema<ActivityLog>(
 const donationSchema = new Schema<IDonation>(
   {
     donor: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    scrapType: { type: String, required: true, min: 3 },
+    scrapType: { type: String, required: true,},
     phone: {
       type: String,
       trim: true,
       required: true,
-      match: [/^\d{7,15}$/, "Invalid phone number"],
     },
     description: { type: String, trim: true, required: true, maxlength: 500 },
-    addressLine1: { type: String, trim: true },
+    addressLine1: { type: String, trim: true, required: true },
     addressLine2: { type: String, trim: true },
-    pincode: { type: Number },
-    city: { type: String, trim: true },
-    country: { type: String, trim: true },
+    pincode: { type: Number, required: true },
+    city: { type: String, trim: true, required: true },
+    district: { type: String, trim: true, required: true },
+    country: { type: String, trim: true, required: true },
     pickupDate: { type: Date, required: true },
     pickupTime: {
       type: String,

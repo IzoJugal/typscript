@@ -53,10 +53,10 @@ connectDB()
 
     // Start the server
     server.listen(PORT, () => {
-      console.log(`✅ Server is running on port ${PORT}`);
+      console.log(` Server is running on port ${PORT}`);
     });
   })
   .catch((error: Error) => {
-    console.error("❌ MongoDB Connection Failed:", error.message);
+    console.error(" MongoDB Connection Failed:", error.message);
     process.exit(1);
   });

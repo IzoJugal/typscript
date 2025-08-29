@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { ObjectId } from "mongodb";
 import mongoose, { Document, Types } from "mongoose";
 import { Admin } from "../Model/AuthModel";
-import { User } from "../Model/AuthModel";
+import { User, IUser } from "../Model/AuthModel";
 import Donation from "../Model/DonationModel";
 import Task from "../Model/TaskModel";
 import Slider from "../Model/SliderModel";
@@ -18,6 +18,8 @@ import path from "path";
 import Notification from "../Model/NotificationsModel";
 import { getIO } from "../config/socket";
 import admin from "../config/FirebaseAdmin";
+import { sendEmail } from "../utils/sendEmail";
+import { generateCertificate } from "../utils/generateCertificate";
 
 // Interface for User Document
 interface UserDocument extends Document {
@@ -508,7 +510,7 @@ const getVolunteerCounts = async (req: Request, res: Response): Promise<void> =>
 
 const getPendingDonations = async (req: Request, res: Response): Promise<void> => {
   try {
-    const donations = await Donation.find({ status: "pending" })
+    const donations = await Donation.find({ status: { $in: ["pending", "picked-up"] } })
       .populate("donor dealer")
       .sort({ createdAt: -1 }) as unknown as DonationDocument[];
 
@@ -606,6 +608,102 @@ const getHistory = async (req: Request, res: Response): Promise<void> => {
       message: "Server error while fetching donation history",
       error: (err as Error).message,
     });
+  }
+};
+
+const markDonationAsDonated = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const donation = await Donation.findById(req.params.id).populate<{ donor: IUser }>('donor', 'firstName lastName email');
+    if (!donation) {
+      res.status(404).json({ message: "Donation not found" });
+      return;
+    }
+
+    if (donation.status !== "picked-up") {
+      res.status(400).json({ message: "Donation must be in picked-up status to mark as donated" });
+      return;
+    }
+
+    // ✅ Update donation status
+    donation.status = "donated";
+    donation.updatedAt = new Date();
+    donation.activityLog.push({
+      action: "donated",
+      by: new mongoose.Types.ObjectId(req.user?.userId),
+      note: "Donation marked as donated by admin",
+      timestamp: new Date(),
+    });
+
+    await donation.save();
+
+    // ✅ Generate certificate
+    const donorName = `${donation.donor.firstName} ${donation.donor.lastName}`;
+    const donationDate = new Date(donation.updatedAt).toLocaleDateString("en-GB");
+    const certificatePath = path.join(__dirname, `../../certificates/donation_${donation._id}.pdf`);
+    await generateCertificate(donorName, donation.scrapType, donationDate, donation.donor.email, certificatePath);
+
+    // ✅ Send email with certificate
+    const emailSubject = "Thank You for Your Donation!";
+    const emailText = `Dear ${donorName},\n\nThank you for donating ${donation.scrapType}. Attached is your certificate of donation.\n\nBest regards,\nYour Organization`;
+    const emailS = await sendEmail(donation.donor.email, emailSubject, emailText, [
+      {
+        filename: `Donation_Certificate_${donation._id}.pdf`,
+        path: certificatePath,
+      },
+    ]);
+    console.log("Email Sent:", emailS)
+
+    // --------------------------------------
+    // ✅ Notifications (DB + Socket + Push)
+    // --------------------------------------
+    const donorId = String(donation.donor._id);
+    const message = `Thank you for donating "${donation.scrapType}". Your certificate has been emailed to you.`;
+
+    // Save in DB
+    const notification = await Notification.create({
+      userId: donorId,
+      message,
+    });
+
+    // --- Socket.io emit ---
+    const io = getIO();
+    io.to(donorId).emit("newNotification", {
+      message,
+      notificationId: notification._id,
+      userId: donorId,
+    });
+
+    // --- Firebase push ---
+    const donor = await User.findById(donorId).select("fcmTokens");
+    if (donor?.fcmTokens?.length) {
+      try {
+        const tokens = donor.fcmTokens.map(tokenObj => tokenObj.token);
+        await admin.messaging().sendEachForMulticast({
+          tokens,
+          notification: {
+            title: "Donation Completed 🎉",
+            body: message,
+          },
+          data: {
+            type: "donation-completed",
+            donationId: String(donation._id),
+            notificationId: String(notification._id),
+            userId: donorId,
+          },
+        });
+      } catch (err) {
+        console.error("Error sending FCM push:", err);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Donation marked as donated, certificate sent, and notifications delivered",
+      donation,
+    });
+  } catch (error) {
+    console.error("Error marking donation as donated:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -712,6 +810,7 @@ const assignDealer = async (req: AuthRequest, res: Response): Promise<void> => {
       message: dealerMessage,
       notificationId: dealerNotification._id,
       link: dealerNotification.link,
+      userId: resolvedDealerId.toString(),
     });
 
     const donorId: string = donation?.donor?._id?.toString()!;
@@ -720,15 +819,18 @@ const assignDealer = async (req: AuthRequest, res: Response): Promise<void> => {
       message: donorMessage,
       notificationId: donorNotification._id,
       link: donorNotification.link,
+      userId: donorId,
     });
 
     // --- Firebase push notifications ---
     // Notify Dealer
     const dealerUser = await User.findById(resolvedDealerId, "fcmTokens");
+    // Notify Dealer
     if (dealerUser?.fcmTokens?.length) {
       try {
+        const tokens = dealerUser.fcmTokens.map(fcmToken => fcmToken.token);
         await admin.messaging().sendEachForMulticast({
-          tokens: dealerUser.fcmTokens,
+          tokens,
           notification: {
             title: "New Donation Update",
             body: dealerMessage,
@@ -737,10 +839,12 @@ const assignDealer = async (req: AuthRequest, res: Response): Promise<void> => {
             type: "dealer-update",
             donationId: donation._id.toString(),
             link: dealerNotification.link ?? "",
+            userId: resolvedDealerId.toString(),
+            notificationId: String(dealerNotification._id),
           },
         });
       } catch (err) {
-        console.error("❌ Firebase push failed for dealer:", resolvedDealerId, err);
+        console.error("Firebase push failed for dealer:", resolvedDealerId, err);
       }
     }
 
@@ -749,8 +853,9 @@ const assignDealer = async (req: AuthRequest, res: Response): Promise<void> => {
       const donorUser = await User.findById(donorId, "fcmTokens");
       if (donorUser?.fcmTokens?.length) {
         try {
+          const tokens = donorUser.fcmTokens.map(fcmToken => fcmToken.token);
           await admin.messaging().sendEachForMulticast({
-            tokens: donorUser.fcmTokens,
+            tokens,
             notification: {
               title: "Donation Update",
               body: donorMessage,
@@ -759,13 +864,16 @@ const assignDealer = async (req: AuthRequest, res: Response): Promise<void> => {
               type: "donor-update",
               donationId: donation._id.toString(),
               link: donorNotification.link ?? "",
+              userId: donorId,
+              notificationId: String(donorNotification._id),
             },
           });
         } catch (err) {
-          console.error("❌ Firebase push failed for donor:", donorId, err);
+          console.error("Firebase push failed for donor:", donorId, err);
         }
       }
     }
+
 
     res.status(200).json({
       success: true,
@@ -815,6 +923,7 @@ const rejectDonation = async (req: Request, res: Response): Promise<void> => {
       io.to(donorId.toString()).emit("newNotification", {
         message,
         notificationId: notification._id,
+        userId: donorId.toString(),
       });
     }
 
@@ -826,8 +935,9 @@ const rejectDonation = async (req: Request, res: Response): Promise<void> => {
       if (donor?.fcmTokens) {
         try {
           if (donor.fcmTokens && donor.fcmTokens.length > 0) {
+            const tokens = donor.fcmTokens.map(tokenObj => tokenObj.token);
             await admin.messaging().sendEachForMulticast({
-              tokens: donor.fcmTokens, // string[]
+              tokens,
               notification: {
                 title: "Donation Rejected",
                 body: message,
@@ -835,14 +945,15 @@ const rejectDonation = async (req: Request, res: Response): Promise<void> => {
               data: {
                 type: "donation-rejected",
                 donationId: donation._id.toString(),
-                notificationId: (notification._id as any).toString(),
+                notificationId: String(notification._id),
+                userId: donorId.toString(),
               },
             });
           }
 
-          console.log("✅ FCM push sent to donor");
+
         } catch (error) {
-          console.error("❌ Error sending FCM push:", error);
+          console.error(" Error sending FCM push:", error);
         }
       }
     }
@@ -965,34 +1076,31 @@ const createVolunteerTask = async (req: Request, res: Response): Promise<void> =
 
     await newTask.save();
 
-    // Socket
     const io = getIO();
+
     for (const volId of validVolunteerIds) {
+      // Create notification once
       const notif = await Notification.create({
         userId: volId,
         message: `You have been assigned a new task: ${taskTitle}`,
         link: `/tasksdetails`,
       });
 
+      // Socket.io notification
       io.to(volId.toString()).emit("newNotification", {
         message: notif.message,
-        notificationId: notif._id,
+        notificationId: String(notif._id),
         link: notif.link,
+        userId: volId.toString(),
       });
-    }
 
-    // Firbase
-    for (const volId of validVolunteerIds) {
-      console.log(`Processing volunteer ID: ${volId}`);
-
+      // Firebase push notification
       const user = await User.findById(volId).select("fcmTokens");
       if (user?.fcmTokens?.length) {
-        console.log(`Found ${user.fcmTokens.length} FCM tokens for user ${volId}`);
-
-        for (const token of user.fcmTokens) {
+        for (const fcmTokenObj of user.fcmTokens) {
           try {
             await admin.messaging().send({
-              token, // ✅ string, not array
+              token: fcmTokenObj.token,
               notification: {
                 title: "New Volunteer Task",
                 body: `You have been assigned: ${taskTitle}`,
@@ -1000,18 +1108,16 @@ const createVolunteerTask = async (req: Request, res: Response): Promise<void> =
               data: {
                 taskId: newTask._id.toString(),
                 type: "volunteer-task",
+                notificationId: String(notif._id),
+                userId: volId.toString(),
               },
             });
-            console.log(`Successfully sent notification to token: ${token}`);
           } catch (fcmErr) {
             console.error("Error sending FCM push:", fcmErr);
           }
         }
-      } else {
-        console.log(`No FCM tokens found for user ${volId}`);
       }
     }
-
 
     res.status(201).json({
       success: true,
@@ -1068,6 +1174,7 @@ const updateVolunteerTask = async (req: Request, res: Response): Promise<void> =
           // 🔹 Socket.io notification
           io.to(vol.user.toString()).emit("newNotification", {
             message: notif.message,
+            userId: vol.user.toString(),
             notificationId: notif._id,
             link: notif.link,
           });
@@ -1075,8 +1182,9 @@ const updateVolunteerTask = async (req: Request, res: Response): Promise<void> =
           // 🔹 Firebase Push Notification
           const volunteer = await User.findById(vol.user).select("fcmTokens");
           if (volunteer?.fcmTokens && volunteer.fcmTokens.length > 0) {
+            const tokens = volunteer.fcmTokens.map(t => t.token);
             await admin.messaging().sendEachForMulticast({
-              tokens: volunteer.fcmTokens, // string[]
+              tokens,
               notification: {
                 title: "Task Update",
                 body: `Task "${existingTask.taskTitle}" has been ${status}.`,
@@ -1084,7 +1192,8 @@ const updateVolunteerTask = async (req: Request, res: Response): Promise<void> =
               data: {
                 type: "task-update",
                 taskId: existingTask._id.toString(),
-                notificationId: (notif._id as any).toString(),
+                notificationId: String(notif._id),
+                userId: vol.user.toString(),
                 link: "/tasksdetails",
               },
             });
@@ -1188,14 +1297,16 @@ const updateVolunteerTask = async (req: Request, res: Response): Promise<void> =
           io.to(volId.toString()).emit("newNotification", {
             message: notif.message,
             notificationId: notif._id,
+            userId: volId.toString(),
             link: notif.link,
           });
 
           // 🔹 Firebase Push Notification
           const volunteer = await User.findById(volId).select("fcmTokens");
           if (volunteer?.fcmTokens && volunteer.fcmTokens.length > 0) {
+            const tokens = volunteer.fcmTokens.map(tokenObj => tokenObj.token);
             await admin.messaging().sendEachForMulticast({
-              tokens: volunteer.fcmTokens,
+              tokens,
               notification: {
                 title: "New Task Assigned",
                 body: `You have been assigned a new task: ${existingTask.taskTitle}`,
@@ -1203,7 +1314,8 @@ const updateVolunteerTask = async (req: Request, res: Response): Promise<void> =
               data: {
                 type: "task-assignment",
                 taskId: existingTask._id.toString(),
-                notificationId: (notif._id as any).toString(),
+                notificationId: String(notif._id),
+                userId: volId.toString(),
                 link: "/tasksdetails",
               },
             });
@@ -1304,13 +1416,14 @@ const deleteVolunteerTask = async (req: Request, res: Response): Promise<void> =
         io.to(vol.user._id.toString()).emit("newNotification", {
           message: notif.message,
           notificationId: notif._id,
+          userId: vol.user._id.toString(),
         });
 
         // 🔹 Firebase push
         const volunteer = await User.findById(vol.user._id).select("fcmTokens");
         if (volunteer?.fcmTokens && volunteer.fcmTokens.length > 0) {
           await admin.messaging().sendEachForMulticast({
-            tokens: volunteer.fcmTokens,
+            tokens: volunteer.fcmTokens.map(tokenObj => tokenObj.token),
             notification: {
               title: "Task Deleted",
               body: `Task "${existingTask.taskTitle}" has been deleted.`,
@@ -1318,7 +1431,8 @@ const deleteVolunteerTask = async (req: Request, res: Response): Promise<void> =
             data: {
               type: "task-deleted",
               taskId: existingTask._id.toString(),
-              notificationId: (notif._id as any).toString(),
+              notificationId: String(notif._id),
+              userId: vol.user._id.toString(),
             },
           });
         }
@@ -1538,6 +1652,7 @@ const toggleUserStatus = async (req: Request, res: Response): Promise<void> => {
     io.to(user._id.toString()).emit("newNotification", {
       message,
       notificationId: notification._id,
+      userId: user._id.toString(),
       link: notification.link,
     });
 
@@ -1552,7 +1667,8 @@ const toggleUserStatus = async (req: Request, res: Response): Promise<void> => {
         data: {
           type: "account-status",
           link: "/settings",
-          notificationId: (notification._id as any).toString(),
+          notificationId: String(notification._id),
+          userId: user._id.toString(),
         },
       });
     }
@@ -1776,6 +1892,7 @@ const toggleDealerStatus = async (req: Request, res: Response): Promise<void> =>
     io.to(dealer._id.toString()).emit("newNotification", {
       message,
       notificationId: notification._id,
+      userId: dealer._id.toString(),
       link: notification.link,
     });
 
@@ -1790,7 +1907,8 @@ const toggleDealerStatus = async (req: Request, res: Response): Promise<void> =>
         data: {
           type: "dealer-account-status",
           link: "/settings",
-          notificationId: (notification._id as any).toString(),
+          notificationId: String(notification._id),
+          userId: dealer._id.toString(),
         },
       });
     }
@@ -2146,7 +2264,7 @@ const shelterToggle = async (req: Request, res: Response): Promise<void> => {
     }
 
     const io = getIO();
-    const message = `Shelter "${shelter.name}" has been ${isActive ? "activated ✅" : "deactivated ❌"}`;
+    const message = `Shelter "${shelter.name}" has been ${isActive ? "activated " : "deactivated "}`;
 
     const volunteers = await User.find({
       roles: { $all: ["user", "volunteer"] },
@@ -2166,8 +2284,9 @@ const shelterToggle = async (req: Request, res: Response): Promise<void> => {
 
       // 🔔 WebSocket
       io.to(volunteer._id.toString()).emit("newNotification", {
+        userId: volunteer._id.toString(),
+        notificationId: String(notification._id),
         message,
-        notificationId: notification._id,
         link: notification.link,
       });
 
@@ -2182,12 +2301,14 @@ const shelterToggle = async (req: Request, res: Response): Promise<void> => {
           data: {
             type: "shelter-status",
             link: "/settings",
-            shelterId: (shelter._id as any).toString(),
-            notificationId: (notification._id as any).toString(),
+            shelterId: String(shelter._id),
+            notificationId: String(notification._id),
+            userId: volunteer._id.toString(),
           },
         });
       }
     }
+
 
     res.json({
       success: true,
@@ -2346,8 +2467,9 @@ const assignVolunteer = async (req: Request, res: Response): Promise<void> => {
 
     // 🔔 WebSocket
     io.to(volunteerId.toString()).emit("newNotification", {
+      userId: volunteerId.toString(),
+      notificationId: String(volunteerNotification._id),
       message: volunteerMsg,
-      notificationId: volunteerNotification._id,
       link: volunteerNotification.link,
     });
 
@@ -2362,9 +2484,10 @@ const assignVolunteer = async (req: Request, res: Response): Promise<void> => {
         },
         data: {
           type: "gaudaan-assignment",
-          link: "/assignedgaudaan",
-          notificationId: (volunteerNotification._id as any).toString(),
+          userId: volunteerId.toString(),
+          notificationId: String(volunteerNotification._id),
           gaudaanId: updated._id.toString(),
+          link: "/assignedgaudaan",
         },
       });
     }
@@ -2380,8 +2503,9 @@ const assignVolunteer = async (req: Request, res: Response): Promise<void> => {
 
       // 🔔 WebSocket
       io.to(gaudaan.donor._id.toString()).emit("newNotification", {
+        userId: gaudaan.donor._id.toString(),
+        notificationId: String(donorNotification._id),
         message: donorMsg,
-        notificationId: donorNotification._id,
         link: donorNotification.link,
       });
 
@@ -2396,9 +2520,10 @@ const assignVolunteer = async (req: Request, res: Response): Promise<void> => {
           },
           data: {
             type: "gaudaan-donor-update",
-            link: "/gaudaan-details",
-            notificationId: (donorNotification._id as any).toString(),
+            userId: gaudaan.donor._id.toString(),
+            notificationId: String(donorNotification._id),
             gaudaanId: updated._id.toString(),
+            link: "/gaudaan-details",
           },
         });
       }
@@ -2456,6 +2581,7 @@ const rejectGaudaan = async (req: Request, res: Response): Promise<void> => {
     io.to(updated!.donor!.toString()).emit("newNotification", {
       message,
       notificationId: notification._id,
+      userId: String(updated.donor),
     });
 
     // Firebase Push
@@ -2469,8 +2595,9 @@ const rejectGaudaan = async (req: Request, res: Response): Promise<void> => {
         },
         data: {
           type: "gaudaan-rejected",
-          notificationId: (notification._id as any).toString(),
+          notificationId: String(notification._id),
           gaudaanId: updated._id.toString(),
+          userId: String(updated.donor),
         },
       });
     }
@@ -2568,6 +2695,7 @@ export default {
   getDonationById,
   getActiveDonations,
   getHistory,
+  markDonationAsDonated,
   getDealers,
   assignDealer,
   rejectDonation,

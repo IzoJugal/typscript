@@ -1,15 +1,17 @@
 // src/controller/AuthController.ts
 import { Request, Response } from 'express';
+import axios, { AxiosResponse } from "axios";
 import mongoose, { Error, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 import { Readable } from 'stream';
 import { Socket } from 'socket.io';
 import { getIO } from '../config/socket';
-import { IUser, User } from "../Model/AuthModel";
+import { IUser, User, Session } from "../Model/AuthModel";
 import Donation from "../Model/DonationModel";
 import VolunteerTask from "../Model/TaskModel";
 import Slider from "../Model/SliderModel";
@@ -18,7 +20,7 @@ import Gaudaan, { IGaudaan } from "../Model/GaudaanModel";
 import Shelter from "../Model/ShelterModel";
 import Notification from "../Model/NotificationsModel";
 import Impact from "../Model/Impact";
-
+import msg91 from 'msg91';
 import admin from "../config/FirebaseAdmin";
 import { error } from 'console';
 
@@ -31,7 +33,7 @@ conn.once('open', () => {
 });
 
 interface AuthRequest extends Request {
-  user?: { userId: string; roles: string[] };
+  user?: { userId: string; roles: string[], _id: string; };
   files?: { [fieldname: string]: Express.Multer.File[] };
   io?: Socket;
 }
@@ -51,6 +53,7 @@ interface SignupBody extends VolunteerSignupBody {
 }
 
 interface SendOTPBody {
+  email: string;
   phone: string;
   method: string;
 }
@@ -66,6 +69,11 @@ interface ForgotPasswordBody {
 
 interface ResetPasswordBody {
   newPassword: string;
+}
+
+interface FCMTokenBody {
+  fcmToken: string;
+  deviceId?: string;
 }
 
 interface UpdateProfileBody {
@@ -93,15 +101,22 @@ interface CreateDonationBody {
   country: string;
   pickupDate: string;
   pickupTime: string;
+  district: string;
   images?: string | { url: string }[];
 }
 
+interface LogoutRequest extends Request {
+  user?: { userId: string };
+  headers: {
+    authorization?: string;
+  };
+}
 interface UpdateDonationStatusBody {
   status: string;
   note?: string;
 }
 
-const dealerUpdatableStatuses = ['in-progress', 'picked-up', 'donated'] as const;
+const dealerUpdatableStatuses = ['in-progress', 'picked-up'] as const;
 type DealerUpdatableStatus = typeof dealerUpdatableStatuses[number];
 
 interface AddPriceAndWeightBody {
@@ -138,6 +153,7 @@ interface AssignRecyclerBody {
   recyclerId: string;
 }
 
+// MSG91 OTP Send and Verify
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
 const sendSMSOTP = async (phone: string, otp: string): Promise<any> => {
@@ -158,6 +174,63 @@ const sendSMSOTP = async (phone: string, otp: string): Promise<any> => {
     }
   );
   return response.data;
+};
+
+//  Send OTP for phone authentication
+const sendOTPAuth = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { phone, method } = req.body as SendOTPBody;
+
+  if (!phone || !method) {
+    res.status(400).json({ message: 'Phone and method are required' });
+    return;
+  }
+
+  const otp = Math.floor(1000 + Math.random() * 9000).toString();
+  console.log("OTP", otp)
+  otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+
+  try {
+    await sendSMSOTP(phone, otp);
+    res.status(200).json({ success: true, message: 'OTP sent successfully' });
+  } catch (error) {
+    console.error('Error sending OTP:', error);
+    res.status(500).json({ success: false, message: 'Error sending OTP' });
+  }
+};
+
+const verifyOTP = async (req: Request, res: Response): Promise<void> => {
+  const { phone, otp } = req.body;
+
+  if (!phone || !otp) {
+    res.status(400).json({ message: 'Phone and OTP are required' });
+    return;
+  }
+
+  const stored = otpStore.get(phone);
+
+  if (!stored) {
+    res.status(400).json({ message: 'OTP not found or expired' });
+    return;
+  }
+
+  const { otp: storedOtp, expiresAt } = stored;
+
+  console.log(`Verifying OTP for ${phone} - Stored OTP: ${storedOtp}, ExpiresAt: ${new Date(expiresAt).toISOString()}, Now: ${new Date().toISOString()}`);
+
+  if (Date.now() > expiresAt) {
+    otpStore.delete(phone); // Clean up expired OTP
+    res.status(400).json({ message: 'OTP expired' });
+    return;
+  }
+
+  if (otp.toString() !== storedOtp.toString()) {
+    res.status(400).json({ message: 'Invalid OTP' });
+    return;
+  }
+
+  // Success
+  otpStore.delete(phone); // Clean up after successful verification
+  res.status(200).json({ success: true, message: 'OTP verified successfully' });
 };
 
 // Volunteer Signup
@@ -188,11 +261,11 @@ const volunteerSignup = async (req: AuthRequest, res: Response): Promise<void> =
   try {
     const normalizedEmail = email.toLowerCase();
 
-    const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { phone }] });
-    if (existingUser) {
-      res.status(400).json({ message: 'Email or phone already in use' });
-      return;
-    }
+    // const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { phone }] });
+    // if (existingUser) {
+    //   res.status(400).json({ message: 'Email or phone already in use' });
+    //   return;
+    // }
 
     const newUser = await User.create({
       firstName,
@@ -201,6 +274,7 @@ const volunteerSignup = async (req: AuthRequest, res: Response): Promise<void> =
       email: normalizedEmail,
       password,
       roles: ['volunteer'],
+      isProfileComplete: true,
     });
 
     const payload = {
@@ -268,11 +342,11 @@ const signUpAuth = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const normalizedEmail = email.toLowerCase();
 
-    const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { phone }] });
-    if (existingUser) {
-      res.status(400).json({ message: 'Email or phone already in use' });
-      return;
-    }
+    // const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { phone }] });
+    // if (existingUser) {
+    //   res.status(400).json({ message: 'Email or phone already in use' });
+    //   return;
+    // }
 
     let validRoles: string[] = ['user'];
     if (roles) {
@@ -291,6 +365,7 @@ const signUpAuth = async (req: AuthRequest, res: Response): Promise<void> => {
       phone,
       email: normalizedEmail,
       password,
+      isProfileComplete: true,
       roles: validRoles,
     });
 
@@ -327,58 +402,32 @@ const signUpAuth = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 };
 
-// Send OTP
-const sendOTPAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { phone, method } = req.body as SendOTPBody;
-
-  if (!phone) {
-    res.status(400).json({ message: 'Phone number required' });
-    return;
-  }
-
-  try {
-    const existingUser = await User.findOne({ phone });
-    if (existingUser) {
-      res.status(400).json({ message: 'Phone already in use' });
-      return;
-    }
-
-    const otp = '1234'; // Static OTP for testing
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-
-    otpStore.set(phone, { otp, expiresAt });
-
-    if (method === 'phone') {
-      await sendSMSOTP(phone, otp);
-    } else {
-      res.status(400).json({ message: 'Invalid OTP method' });
-      return;
-    }
-
-    res.status(200).json({ success: true, message: `OTP sent via ${method}` });
-  } catch (err) {
-    console.error('Send OTP Error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while sending OTP',
-      error: (err as Error).message,
-    });
-  }
-};
-
 // Sign In
 const signInAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { email, password } = req.body as SignInBody;
+  const { identifier, password, fcmToken, deviceId } = req.body;
+  const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+  const userAgent = req.get('User-Agent') || 'unknown';
 
   try {
-    const user = await User.findOne({ email });
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+    const isMobile = /^[6-9]\d{9}$/.test(identifier);
+
+    if (!isEmail && !isMobile) {
+      res.status(400).json({ message: 'Invalid email or mobile number format' });
+      return;
+    }
+
+    const user = await User.findOne(isEmail ? { email: identifier } : { phone: identifier });
+
     if (!user) {
+      console.log('❌ User not found for identifier:', identifier);
       res.status(404).json({ message: 'User not found' });
       return;
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.log('❌ Invalid password attempt for user:', user.email || user.phone);
       res.status(400).json({ message: 'Invalid password' });
       return;
     }
@@ -389,6 +438,54 @@ const signInAuth = async (req: AuthRequest, res: Response): Promise<void> => {
       { expiresIn: '1d' }
     );
 
+    // ✅ Invalidate all existing sessions for this user
+    await Session.updateMany(
+      { userId: String(user._id), isActive: true },
+      { isActive: false }
+    );
+    console.log('🧹 Previous sessions invalidated.');
+
+    // ✅ Create new session
+    const session = new Session({
+      userId: String(user._id),
+      ipAddress,
+      deviceId,
+      userAgent,
+      token,
+      loginTime: new Date(),
+      lastActivity: new Date(),
+      isActive: true,
+    });
+
+    try {
+      await session.save();
+      console.log('✅ New session saved. ID:', session._id);
+    } catch (sessionError) {
+      console.error('❌ Failed to save session:', sessionError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to save session',
+        error: (sessionError as Error).message,
+      });
+      return;
+    }
+
+    // ✅ Reset FCM tokens to only current one
+    if (fcmToken && deviceId) {
+      console.log('🔄 Resetting FCM tokens...');
+      user.fcmTokens = [
+        {
+          token: fcmToken,
+          deviceId,
+          lastUpdated: new Date(),
+        },
+      ];
+      await user.save();
+      console.log('✅ FCM token stored for device:', deviceId);
+    }
+
+    console.log('✅ Sign-in successful for user:', user.email || user.phone);
+
     res.status(200).json({
       success: true,
       message: 'Sign-in successful',
@@ -397,12 +494,58 @@ const signInAuth = async (req: AuthRequest, res: Response): Promise<void> => {
         id: user._id,
         roles: user.roles,
       },
+      session: {
+        sessionId: session._id,
+        ipAddress: session.ipAddress,
+        deviceId: session.deviceId,
+        loginTime: session.loginTime,
+      },
     });
   } catch (error) {
-    console.error('Sign-in error:', error);
+    console.error('❌ Sign-in error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
+      error: (error as Error).message,
+    });
+  }
+};
+
+const logoutAuth = async (req: LogoutRequest, res: Response): Promise<void> => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    res.status(401).json({ message: 'No token provided' });
+    return;
+  }
+
+  try {
+    // Verify token to get userId
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'あなたの_jwt_secret') as { userId: string };
+    const userId = decoded.userId;
+
+    // Find and deactivate the session
+    const session = await Session.findOne({ userId, token, isActive: true });
+
+    if (!session) {
+      res.status(404).json({ message: 'Session not found or already inactive' });
+      return;
+    }
+
+    session.isActive = false;
+    await session.save();
+
+    console.log('✅ Session invalidated for user:', userId, 'Session ID:', session._id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Logout successful, session invalidated',
+    });
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during logout',
       error: (error as Error).message,
     });
   }
@@ -560,6 +703,7 @@ const sendOTPapp = async (req: Request, res: Response): Promise<void> => {
     user.otp = otp;
     user.otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 mins from now
     await user.save();
+    console.log("OTP", user.otp)
 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST, // e.g., "smtp.sendgrid.net"
@@ -607,13 +751,16 @@ const otpVerify = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       res.status(404).json({ success: false, message: "User not found" });
       return;
     }
 
-    if (user.otp !== otp) {
+    console.log("OTP from DB:", user.otp, "Type:", typeof user.otp);
+    console.log("OTP from Request:", otp, "Type:", typeof otp);
+
+    if (String(user.otp) !== String(otp)) {
       res.status(400).json({ success: false, message: "Invalid OTP" });
       return;
     }
@@ -623,6 +770,7 @@ const otpVerify = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Clear OTP after success
     user.otp = undefined;
     user.otpExpires = undefined;
     await user.save();
@@ -898,7 +1046,7 @@ const changePassword = async (req: AuthRequest, res: Response): Promise<void> =>
 // Assign Volunteer Role
 const assignVolunteerRole = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || String(req.user?._id);
     if (!userId) {
       res.status(400).json({ message: 'User ID is required' });
       return;
@@ -936,38 +1084,43 @@ const assignVolunteerRole = async (req: AuthRequest, res: Response): Promise<voi
 
       // Socket
       const io = getIO();
+
       for (let i = 0; i < admins.length; i++) {
         const adminUser = admins[i];
         if (!adminUser.notificationsEnabled) continue;
 
-        // ✅ SOCKET.IO push
-        const sockets = await io.in((adminUser._id as Types.ObjectId).toString()).fetchSockets();
+        const userIdStr = (adminUser._id as Types.ObjectId).toString();
+
+        // SOCKET.IO push
+        const sockets = await io.in(userIdStr).fetchSockets();
         sockets.forEach((socket) => {
           if (socket.data.notificationsEnabled) {
             socket.emit("newNotification", {
+              userId: userIdStr,
               message,
-              notificationId: createdNotifications[i]._id,
+              notificationId: String(createdNotifications[i]._id),
               link: createdNotifications[i].link,
             });
           }
         });
 
-        // ✅ FIREBASE PUSH
-        if (adminUser.fcmTokens && adminUser.fcmTokens.length > 0) {
+        const tokens = adminUser.fcmTokens?.map((item) => item.token) ?? [];
+
+        // FIREBASE PUSH
+        if (tokens.length > 0) {
           try {
-            const res = await admin.messaging().sendEachForMulticast({
-              tokens: adminUser.fcmTokens, // array of tokens
+            await admin.messaging().sendEachForMulticast({
+              tokens, // array of tokens
               notification: {
                 title: "📢 New Notification",
                 body: message,
               },
               data: {
-                notificationId: (createdNotifications[i]._id as any).toString(),
+                userId: userIdStr, // ✅ Added userId
+                notificationId: String(createdNotifications[i]._id),
                 link: createdNotifications[i].link || "",
               },
             });
-
-            console.log("FCM push result:", res);
           } catch (err: unknown) {
             if (err instanceof Error) {
               console.error("FCM push error:", err.message);
@@ -977,6 +1130,7 @@ const assignVolunteerRole = async (req: AuthRequest, res: Response): Promise<voi
           }
         }
       }
+
     }
 
     res.status(200).json({
@@ -1118,6 +1272,7 @@ const createDonation = async (req: AuthRequest, res: Response): Promise<void> =>
       addressLine2,
       pincode,
       city,
+      district,
       country,
       pickupDate,
       pickupTime,
@@ -1126,67 +1281,106 @@ const createDonation = async (req: AuthRequest, res: Response): Promise<void> =>
 
     const donor = req.user?.userId;
     if (!donor) {
-      res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ message: "Unauthorized" });
       return;
     }
 
-    const requiredFields = [scrapType, phone, description, addressLine1, pincode, city, country, pickupDate, pickupTime];
-    if (requiredFields.some((field) => !field)) {
-      res.status(400).json({ message: 'Missing required donation fields' });
-      return;
-    }
+    // Validate required fields
+    const requiredFields = {
+      scrapType,
+      phone,
+      description,
+      addressLine1,
+      pincode,
+      city,
+      district,
+      country,
+      pickupDate,
+      pickupTime,
+    };
 
-    const pin = Number(pincode);
-    if (isNaN(pin)) {
-      res.status(400).json({ message: 'Invalid pincode' });
-      return;
-    }
-
-    let uploadedImages: { url: string }[] = [];
-    if (req.files?.images) {
-      const files = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
-
-      for (const file of files) {
-        const stream = Readable.from(file.buffer);
-        const filename = `${Date.now()}-${file.originalname}`;
-
-        const uploadStream = gfs.openUploadStream(filename, {
-          contentType: file.mimetype,
-        });
-
-        await new Promise((resolve, reject) => {
-          stream
-            .pipe(uploadStream)
-            .on('finish', () => {
-              uploadedImages.push({ url: `/file/${uploadStream.id}` });
-            })
-            .on('error', (err) => {
-              console.error('GridFS upload error:', err);
-              reject(err);
-            });
-        });
+    for (const [key, value] of Object.entries(requiredFields)) {
+      if (!value) {
+        res.status(400).json({ message: `Missing required field: ${key}` });
+        return;
       }
     }
 
+    // Validate pickupDate (must be at least 5 days in the future)
+    const today = new Date();
+    const minimumPickupDate = new Date();
+    minimumPickupDate.setDate(today.getDate() + 5);
+
+    const selectedPickupDate = new Date(pickupDate);
+    selectedPickupDate.setHours(0, 0, 0, 0);
+    minimumPickupDate.setHours(0, 0, 0, 0);
+
+    if (selectedPickupDate < minimumPickupDate) {
+      res.status(400).json({ message: "Pickup date must be at least 5 days from today" });
+      return;
+    }
+
+    // Validate phone (basic 10 digit)
+    if (!/^\d{10}$/.test(phone)) {
+      res.status(400).json({ message: "Invalid phone number" });
+      return;
+    }
+
+    // Validate pincode
+    const pin = Number(pincode);
+    if (isNaN(pin) || pin.toString().length !== 6) {
+      res.status(400).json({ message: "Invalid pincode" });
+      return;
+    }
+
+    // Handle file uploads to GridFS
+    const uploadedImages: { url: string }[] = [];
+    if (req.files?.images) {
+      const files = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+      for (const file of files) {
+        try {
+          const stream = Readable.from(file.buffer);
+          const filename = `${Date.now()}-${file.originalname}`;
+          const uploadStream = gfs.openUploadStream(filename, { contentType: file.mimetype });
+
+          await new Promise<void>((resolve, reject) => {
+            stream
+              .pipe(uploadStream)
+              .on("finish", () => {
+                uploadedImages.push({ url: `/file/${uploadStream.id}` });
+                resolve();
+              })
+              .on("error", reject);
+          });
+        } catch (err) {
+          console.error("GridFS upload error:", err);
+          res.status(500).json({ message: "Error uploading images" });
+          return;
+        }
+      }
+    }
+
+    // Handle URL-based images (if provided in request body)
     let urlImages: { url: string }[] = [];
     if (images) {
       try {
-        const parsed = typeof images === 'string' ? JSON.parse(images) : images;
+        const parsed = typeof images === "string" ? JSON.parse(images) : images;
         if (Array.isArray(parsed)) {
           urlImages = parsed.filter((img) => img?.url);
         }
-      } catch (err) {
-        res.status(400).json({ message: 'Invalid images format in body' });
+      } catch {
+        res.status(400).json({ message: "Invalid images format in body" });
         return;
       }
     }
 
     const allImages = [...uploadedImages, ...urlImages];
     if (allImages.length === 0) {
-      res.status(400).json({ message: 'At least one image is required' });
+      res.status(400).json({ message: "At least one image is required" });
       return;
     }
 
+    // Create donation entry
     const donation = await Donation.create({
       donor,
       scrapType,
@@ -1196,72 +1390,76 @@ const createDonation = async (req: AuthRequest, res: Response): Promise<void> =>
       addressLine2,
       pincode: pin,
       city,
+      district,
       country,
       pickupDate,
       pickupTime,
       images: allImages,
       activityLog: [
-        {
-          action: 'created',
-          by: donor,
-          note: 'Donation created by donor.',
-        },
+        { action: "created", by: donor, note: "Donation created by donor." },
       ],
     });
 
-    const admins = await User.find({ roles: 'admin' }, '_id');
-    const adminIds = admins.map((a) => (a._id as Types.ObjectId).toString());
+    // Notify admins
+    const admins = await User.find({ roles: "admin" }, "_id fcmTokens");
     const message = `New donation created: ${scrapType}`;
 
-    const notificationPromises = adminIds.map((adminId) =>
-      Notification.create({ userId: adminId, message, link: `/pickups/${donation._id}` })
+    const notifications = await Promise.all(
+      admins.map((admin) =>
+        Notification.create({
+          userId: admin._id,
+          message,
+          link: `/pickups/${donation._id}`,
+        })
+      )
     );
-    const createdNotifications = await Promise.all(notificationPromises);
 
     const io = getIO();
+    const adminUsers = await User.find({ roles: "admin" }, "_id fcmTokens");
 
-    for (let i = 0; i < adminIds.length; i++) {
-      const adminId = adminIds[i];
-      const notification = createdNotifications[i];
+    await Promise.all(
+      adminUsers.map(async (adminUser, idx) => {
+        const notification = notifications[idx];
+        const userIdStr = String(adminUser._id);
 
-      // ✅ Socket.io push
-      io.to(adminId).emit("newNotification", {
-        message,
-        notificationId: (notification._id as Types.ObjectId).toString(),
-        link: notification.link,
-      });
+        io.to(userIdStr).emit("newNotification", {
+          userId: userIdStr,
+          notificationId: String(notification._id),
+          message: notification.message,
+          createdAt: notification.createdAt,
+        });
 
-      // ✅ Firebase push
-      const adminUser = await User.findById(adminId).select("fcmTokens");
-      if (adminUser?.fcmTokens?.length) {
-        try {
-          await admin.messaging().sendEachForMulticast({
-            tokens: adminUser.fcmTokens,
-            notification: {
-              title: "📢 New Notification",
-              body: message,
-            },
-            data: {
-              notificationId: (notification._id as Types.ObjectId).toString(),
-              link: notification.link || "",
-            },
-          });
-        } catch (err) {
-          console.error("FCM push failed:", err);
+        if (adminUser.fcmTokens?.length) {
+          try {
+            await admin.messaging().sendEachForMulticast({
+              tokens: adminUser.fcmTokens.map((tokenObj) => tokenObj.token),
+              notification: {
+                title: "📢 New Notification",
+                body: message,
+              },
+              data: {
+                userId: userIdStr,
+                notificationId: String(notification._id),
+                link: notification.link || "",
+              },
+            });
+          } catch (err) {
+            console.error("FCM push failed for admin:", adminUser._id, err);
+          }
         }
-      }
-    }
+      })
+    );
 
-    res.status(200).json({
+    res.status(201).json({
       success: true,
-      message: 'Donation created successfully',
+      message: "Donation created successfully",
       donation,
     });
   } catch (error) {
-    console.error('Create Donation Error:', error);
+    console.error("Create Donation Error:", error);
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: "Server error",
       error: (error as Error).message,
     });
   }
@@ -1489,6 +1687,44 @@ const getDonationsCountByStatus = async (req: AuthRequest, res: Response): Promi
   }
 };
 
+const getDonationByIdForUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    const { id } = req.params;
+
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    // Only fetch donation where the current user is the donor
+    const donation = await Donation.findOne({ _id: id, donor: userId })
+      .populate('donor', 'firstName lastName email phone profileImage')
+      .populate('dealer', 'firstName email profileImage');
+
+    if (!donation) {
+      res.status(404).json({
+        success: false,
+        message: 'Donation not found or not accessible to you',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      donation,
+    });
+  } catch (err) {
+    console.error('Error fetching donation by ID:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: (err as Error).message,
+    });
+  }
+};
+
+// Tasks
 // Get Assigned Tasks
 const getMyAssignedTasks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -1683,38 +1919,46 @@ const updateTaskStatus = async (req: AuthRequest, res: Response): Promise<void> 
       message: `${volunteerName} has ${statusToUpdate} a task.`,
     }));
 
-    await Notification.insertMany(notifications);
+    // Insert notifications and get the created docs with _id
+    const createdNotifications = await Notification.insertMany(notifications);
 
     const io = getIO();
 
-    admins.forEach(async (adminUser) => {
+    for (let i = 0; i < admins.length; i++) {
+      const adminUser = admins[i];
       const adminId = (adminUser._id as Types.ObjectId).toString();
+      const notif = createdNotifications[i];
 
-      // 🔹 Socket.io push
+      // 🔹 Socket.io push with notificationId and userId
       io.to(adminId).emit("notification", {
-        title: `Task ${statusToUpdate}`,
-        message: `${volunteerName} has ${statusToUpdate} a task.`,
+        userId: adminId,
+        notificationId: String(notif._id),
+        title: notif.title,
+        message: notif.message,
       });
 
       // 🔹 Firebase push
       if (adminUser.fcmTokens && adminUser.fcmTokens.length > 0) {
         try {
           await admin.messaging().sendEachForMulticast({
-            tokens: adminUser.fcmTokens, // array of FCM tokens for this admin
+            tokens: adminUser.fcmTokens.map(t => t.token),
             notification: {
-              title: `Task ${statusToUpdate}`,
-              body: `${volunteerName} has ${statusToUpdate} a task.`,
+              title: notif.title,
+              body: notif.message,
             },
             data: {
+              userId: adminId,
+              notificationId: String(notif._id),
               taskStatus: statusToUpdate,
-              volunteerName: volunteerName,
+              volunteerName,
             },
           });
         } catch (err) {
-          console.error(`❌ FCM push failed for admin ${adminId}:`, err);
+          console.error(`FCM push failed for admin ${adminId}:`, err);
         }
       }
-    });
+    }
+
 
     res.status(200).json({
       success: true,
@@ -1891,7 +2135,7 @@ const updateDonationStatus = async (req: AuthRequest, res: Response): Promise<vo
     const dealer = donation.dealer;
     const dealerName = dealer && isPopulatedUser(dealer) ? dealer.firstName : "Dealer";
 
-    // ✅ Notify Donor
+    //  Notify Donor
     if (donorId) {
       const message = `Your donation has been marked as '${safeStatus}' by dealer ${dealerName}.`;
 
@@ -1903,9 +2147,10 @@ const updateDonationStatus = async (req: AuthRequest, res: Response): Promise<vo
       });
 
       // 🔹 Socket.io push
-      io.to(donorId).emit("newNotification", {
+      io.to(donorId.toString()).emit("newNotification", {
+        userId: donorId.toString(),
         message: notification.message,
-        notificationId: (notification._id as any).toString(),
+        notificationId: String(notification._id),
         link: notification.link,
       });
 
@@ -1914,23 +2159,26 @@ const updateDonationStatus = async (req: AuthRequest, res: Response): Promise<vo
       if (donorUser?.fcmTokens?.length) {
         try {
           await admin.messaging().sendEachForMulticast({
-            tokens: donorUser.fcmTokens,
+            tokens: donorUser.fcmTokens.map(t => t.token),
             notification: {
               title: "Donation Status Updated",
               body: message,
             },
             data: {
+              userId: donorId.toString(),
+              notificationId: String(notification._id),
               type: "donation-status",
-              donationId: (donation._id as any).toString(),
+              donationId: String(donation._id),
+              link: "/donationdetails",
             },
           });
         } catch (err) {
-          console.error("❌ FCM push to donor failed:", err);
+          console.error("FCM push to donor failed:", err);
         }
       }
     }
 
-    // ✅ Notify Admins
+    //  Notify Admins
     const admins = await User.find({ roles: "admin" }, "_id fcmTokens");
     const adminMessage = `Dealer ${dealerName} updated donation status to '${safeStatus}'.`;
 
@@ -1946,8 +2194,9 @@ const updateDonationStatus = async (req: AuthRequest, res: Response): Promise<vo
 
       // 🔹 Socket.io push
       io.to(adminId).emit("newNotification", {
+        userId: adminId,
         message: notification.message,
-        notificationId: (notification._id as any).toString(),
+        notificationId: String(notification._id),
         link: notification.link,
       });
 
@@ -1955,21 +2204,26 @@ const updateDonationStatus = async (req: AuthRequest, res: Response): Promise<vo
       if (adminUser.fcmTokens?.length) {
         try {
           await admin.messaging().sendEachForMulticast({
-            tokens: adminUser.fcmTokens,
+            tokens: adminUser.fcmTokens.map(tokenObj => tokenObj.token),
             notification: {
               title: "Dealer Update",
               body: adminMessage,
             },
             data: {
+              userId: adminId,
+              notificationId: String(notification._id),
               type: "dealer-update",
-              donationId: (donation._id as any).toString(),
+              donationId: String(donation._id),
+              link: `/pickups/${donation._id}`,
             },
           });
         } catch (err) {
-          console.error(`❌ FCM push to admin ${adminId} failed:`, err);
+          console.error(`FCM push to admin ${adminId} failed:`, err);
         }
       }
     }
+
+
     res.status(200).json({
       success: true,
       message: 'Donation status updated by dealer',
@@ -2037,7 +2291,7 @@ const addPriceandweight = async (req: AuthRequest, res: Response): Promise<void>
       ? donation.dealer.firstName
       : "Dealer";
 
-    // ✅ Notify Donor
+    //  Notify Donor
     const donorId = donation.donor?._id?.toString();
     if (donorId) {
       const message = `Dealer ${dealerName} updated your donation with price ₹${price} and weight ${weight}kg.`;
@@ -2052,7 +2306,8 @@ const addPriceandweight = async (req: AuthRequest, res: Response): Promise<void>
       // 🔹 Socket.io
       io.to(donorId).emit("newNotification", {
         message: notification.message,
-        notificationId: (notification._id as any).toString(),
+        userId: donorId,
+        notificationId: String(notification._id),
         link: notification.link,
       });
 
@@ -2061,18 +2316,20 @@ const addPriceandweight = async (req: AuthRequest, res: Response): Promise<void>
       if (donorUser?.fcmTokens?.length) {
         try {
           await admin.messaging().sendEachForMulticast({
-            tokens: donorUser.fcmTokens,
+            tokens: donorUser.fcmTokens.map(tokenObj => tokenObj.token),
             notification: {
               title: "Donation Updated",
               body: message,
             },
             data: {
               type: "donation-update",
-              donationId: (donation._id as any).toString(),
+              donationId: String(donation._id),
+              userId: donorId,
+              notificationId: String(notification._id),
             },
           });
         } catch (err) {
-          console.error("❌ FCM push to donor failed:", err);
+          console.error(" FCM push to donor failed:", err);
         }
       }
     }
@@ -2080,7 +2337,7 @@ const addPriceandweight = async (req: AuthRequest, res: Response): Promise<void>
     const admins = await User.find({ roles: "admin" }, "_id fcmTokens");
     const adminMessage = `Dealer ${dealerName} updated price ₹${price} and weight ${weight}kg for a donation.`;
 
-    for (const adminUser of admins) {   // ✅ renamed
+    for (const adminUser of admins) {   //  renamed
       const adminId = (adminUser._id as Types.ObjectId).toString();
 
       const notification = await Notification.create({
@@ -2092,28 +2349,33 @@ const addPriceandweight = async (req: AuthRequest, res: Response): Promise<void>
 
       io.to(adminId).emit("newNotification", {
         message: notification.message,
-        notificationId: (notification._id as any).toString(),
+        notificationId: String(notification._id),
+        userId: adminId,
         link: notification.link,
       });
 
       if (adminUser.fcmTokens?.length) {
         try {
           await admin.messaging().sendEachForMulticast({
-            tokens: adminUser.fcmTokens,
+            tokens: adminUser.fcmTokens.map(t => t.token),
             notification: {
               title: "Dealer Update",
               body: adminMessage,
             },
             data: {
+              userId: adminId,
+              notificationId: String(notification._id),
               type: "dealer-update",
-              donationId: (donation._id as any).toString(),
+              donationId: String(donation._id),
+              link: `/pickups/${donation._id}`,
             },
           });
         } catch (err) {
-          console.error(`❌ FCM push to admin ${adminId} failed:`, err);
+          console.error(` FCM push to admin ${adminId} failed:`, err);
         }
       }
     }
+
     res.status(200).json({
       success: true,
       message: 'Donation updated successfully',
@@ -2148,17 +2410,16 @@ const getHistory = async (req: AuthRequest, res: Response): Promise<void> => {
     const donatedStatus = ['donated', 'processed', 'recycled'];
 
     const totalDonatedCount = await Donation.countDocuments({
-      status: donatedStatus,
+      status: { $in: donatedStatus },
       dealer: userId,
     });
 
     const donatedPickups = await Donation.find({
-      status: donatedStatus,
+      status: { $in: donatedStatus },
       dealer: userId,
     })
       .populate('donor', 'firstName lastName email phone profileImage')
       .populate('recycler', 'firstName lastName email phone profileImage');
-
     res.status(200).json({
       success: true,
       message: 'Donated pickups fetched successfully',
@@ -2240,11 +2501,13 @@ const gaudaanForm = async (req: AuthRequest, res: Response): Promise<void> => {
       consent,
     } = req.body as GaudaanFormBody;
 
-    if (consent !== true && consent !== 'true') {
-      res.status(400).json({ message: 'Consent is required' });
+    // ✅ Consent required
+    if (consent !== true && consent !== "true") {
+      res.status(400).json({ message: "Consent is required" });
       return;
     }
 
+    // ✅ Required fields check
     const requiredFields: Record<string, string> = {
       name,
       email,
@@ -2255,28 +2518,29 @@ const gaudaanForm = async (req: AuthRequest, res: Response): Promise<void> => {
       animalType,
     };
     for (const [key, value] of Object.entries(requiredFields)) {
-      if (!value || value.trim() === '') {
+      if (!value || value.trim() === "") {
         res.status(400).json({ message: `${key} is required` });
         return;
       }
     }
 
+    // ✅ Validations
     if (!/^\S+@\S+\.\S+$/.test(email)) {
-      res.status(400).json({ message: 'Invalid email format' });
+      res.status(400).json({ message: "Invalid email format" });
       return;
     }
     if (!/^\d{10}$/.test(phone)) {
-      res.status(400).json({ message: 'Phone must be 10 digits' });
+      res.status(400).json({ message: "Phone must be 10 digits" });
+      return;
+    }
+    if (animalRegisteredId && animalRegisteredId.trim() === "") {
+      res
+        .status(400)
+        .json({ message: "Animal Registered ID cannot be empty if provided" });
       return;
     }
 
-    if (animalRegisteredId && animalRegisteredId.trim() === '') {
-      res.status(400).json({
-        message: 'Animal Registered ID cannot be empty if provided',
-      });
-      return;
-    }
-
+    // ✅ File uploads
     const images: { url: string }[] = [];
     const files = req.files as Express.Multer.File[] | undefined;
 
@@ -2292,15 +2556,18 @@ const gaudaanForm = async (req: AuthRequest, res: Response): Promise<void> => {
         await new Promise((resolve, reject) => {
           stream
             .pipe(uploadStream)
-            .on('finish', () => {
+            .on("finish", () => {
               images.push({ url: `/file/${uploadStream.id}` });
+              resolve(null);
             })
-            .on('error', reject);
+            .on("error", reject);
         });
       }
     }
 
+    // ✅ Save record
     const gaudaan = new Gaudaan({
+      donor: req.user?.userId,
       name,
       email,
       phone,
@@ -2308,47 +2575,91 @@ const gaudaanForm = async (req: AuthRequest, res: Response): Promise<void> => {
       pickupDate,
       pickupTime,
       images,
-      governmentId: governmentId || '',
-      animalRegisteredId: animalRegisteredId || '',
+      governmentId: governmentId || "",
+      animalRegisteredId: animalRegisteredId || "",
       animalType,
-      animalCondition: animalCondition || 'healthy',
-      animalDescription: animalDescription || '',
-      consent: consent === 'true',
-      donor: req.user?.userId,
+      animalCondition: animalCondition || "healthy",
+      animalDescription: animalDescription || "",
+      consent: consent === "true",
+      statusHistory: [
+        {
+          status: "unassigned",
+          timestamp: new Date(),
+        },
+      ],
     });
+
 
     await gaudaan.save();
 
+    // ✅ Find admins
     const admins = await User.find({
-      roles: 'admin',
+      roles: "admin",
       notificationsEnabled: true,
     });
 
-    const notificationPromises = admins.map((admin) =>
-      Notification.create({
-        userId: admin._id,
-        message: `🪔 New Gaudaan submitted by ${gaudaan.name}`,
-      })
+    // ✅ Create DB notifications
+    const notifications = await Promise.all(
+      admins.map(adminUser =>
+        Notification.create({
+          userId: adminUser._id,
+          message: `🪔 New Gaudaan submitted by ${gaudaan.name}`,
+          link: `/gaudaan/${gaudaan._id}`,
+        })
+      )
     );
 
-    await Promise.all(notificationPromises);
+    const gaudaanId = String(gaudaan._id);
+    const msg = `🪔 New Gaudaan submitted by ${gaudaan.name}`;
 
-    if (req.io) {
-      admins.forEach((admin) => {
-        req.io!.to((admin._id as Types.ObjectId).toString()).emit('newNotification', {
-          message: `🪔 New Gaudaan submitted by ${gaudaan.name}`,
-        });
-      });
+    for (let i = 0; i < admins.length; i++) {
+      const adminUser = admins[i];
+      const notification = notifications[i];
+
+      // Socket notification
+      if (req.io) {
+        req.io
+          .to((adminUser._id as Types.ObjectId).toString())
+          .emit("newNotification", {
+            userId: String(adminUser._id),
+            message: msg,
+            notificationId: String(notification._id),
+            link: notification.link,
+          });
+      }
+
+      // FCM push notification
+      if (adminUser.fcmTokens?.length) {
+        try {
+          await admin.messaging().sendEachForMulticast({
+            tokens: adminUser.fcmTokens.map(t => t.token),
+            notification: {
+              title: "New Gaudaan Submission",
+              body: msg,
+            },
+            data: {
+              userId: String(adminUser._id),
+              gaudaanId,
+              type: "gaudaan",
+              notificationId: String(notification._id),
+              link: `/gaudaan/${gaudaanId}`,
+            },
+          });
+        } catch (err) {
+          console.error(`FCM push failed for admin ${adminUser._id}:`, err);
+        }
+      }
     }
 
+
     res.status(201).json({
-      message: 'Gaudaan record created successfully',
+      message: "Gaudaan record created successfully",
       data: gaudaan,
     });
   } catch (error) {
-    console.error('Error creating Gaudaan:', error);
+    console.error("Error creating Gaudaan:", error);
     res.status(400).json({
-      message: 'Error creating record',
+      message: "Error creating record",
       error: (error as Error).message,
     });
   }
@@ -2381,6 +2692,34 @@ const getGaudaanByUserId = async (req: AuthRequest, res: Response): Promise<void
     res.status(500).json({
       success: false,
       message: 'Server error',
+      error: (error as Error).message,
+    });
+  }
+};
+
+const getGaudaanById = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const record = await Gaudaan.findById(id)
+      .populate("assignedVolunteer", "firstName lastName phone profileImage fcmTokens")
+      .populate("shelterId", "name address phone");
+
+    if (!record) {
+      res.status(404).json({ message: "Gaudaan record not found" });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Gaudaan record fetched successfully",
+      data: record,
+    });
+  } catch (error) {
+    console.error("Error fetching Gaudaan by ID:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
       error: (error as Error).message,
     });
   }
@@ -2517,8 +2856,9 @@ const updategaudaanStatus = async (req: AuthRequest, res: Response): Promise<voi
 
     // Send via socket.io
     io.to(donorId).emit("newNotification", {
+      userId: donorId,
       message: notification.message,
-      notificationId: notification._id,
+      notificationId: String(notification._id),
       link: notification.link,
     });
 
@@ -2527,18 +2867,21 @@ const updategaudaanStatus = async (req: AuthRequest, res: Response): Promise<voi
     if (donor?.fcmTokens?.length) {
       try {
         await admin.messaging().sendEachForMulticast({
-          tokens: donor.fcmTokens,
+          tokens: donor.fcmTokens.map(t => t.token),
           notification: {
             title: "Gaudaan Update",
             body: message,
           },
           data: {
+            userId: donorId,
             type: "gaudaan-status",
-            donationId: (donation._id as any).toString(),
+            donationId: String(donation._id),
+            notificationId: String(notification._id),
+            link: notification.link!,
           },
         });
       } catch (err) {
-        console.error(`❌ Failed to push to donor ${donorId}`, err);
+        console.error(` Failed to push to donor ${donorId}`, err);
       }
     }
 
@@ -2547,41 +2890,48 @@ const updategaudaanStatus = async (req: AuthRequest, res: Response): Promise<voi
     const adminMessage = `Volunteer updated Gaudaan status to '${status}'.`;
 
     // Create DB notifications for admins
-    const adminNotifications = admins.map((admin) =>
-      Notification.create({
-        userId: admin._id,
-        message: adminMessage,
-        type: "gaudaan-update",
-        link: `/gaudaan/${donation._id}`,
-      })
+    const adminNotifications = await Promise.all(
+      admins.map((admin) =>
+        Notification.create({
+          userId: admin._id,
+          message: adminMessage,
+          type: "gaudaan-update",
+          link: `/gaudaan/${donation._id}`,
+        })
+      )
     );
-    await Promise.all(adminNotifications);
 
     // Emit socket + send Firebase push
-    for (const adminUser of admins) {
+    for (let i = 0; i < admins.length; i++) {
+      const adminUser = admins[i];
       const adminId = (adminUser._id as Types.ObjectId).toString();
+      const adminNotification = adminNotifications[i];
 
       io.to(adminId).emit("newNotification", {
-        message: adminMessage,
-        notificationId: adminId, // ⚠️ If you want actual DB _id, use saved Notification
-        link: `/gaudaan/${donation._id}`,
+        userId: adminId,
+        message: adminNotification.message,
+        notificationId: String(adminNotification._id),
+        link: adminNotification.link,
       });
 
       if (adminUser.fcmTokens?.length) {
         try {
           await admin.messaging().sendEachForMulticast({
-            tokens: adminUser.fcmTokens,
+            tokens: adminUser.fcmTokens.map(t => t.token),
             notification: {
               title: "Gaudaan Update",
               body: adminMessage,
             },
             data: {
+              userId: adminId,
               type: "gaudaan-update",
-              donationId: (donation._id as any).toString(),
+              donationId: String(donation._id),
+              notificationId: String(adminNotification._id),
+              link: adminNotification.link!,
             },
           });
         } catch (err) {
-          console.error(`❌ Failed to push to admin ${adminId}`, err);
+          console.error(` Failed to push to admin ${adminId}`, err);
         }
       }
     }
@@ -2602,7 +2952,6 @@ const updategaudaanStatus = async (req: AuthRequest, res: Response): Promise<voi
 };
 
 // Assign Recycler
-
 const getRecyclers = async (req: Request, res: Response): Promise<Response> => {
   try {
     // Assuming req.user has been populated by middleware
@@ -2634,9 +2983,9 @@ const assignRecycler = async (req: AuthRequest, res: Response): Promise<void> =>
     const userId = req.user?.userId;
     const roles = req.user?.roles || [];
 
-    if (!roles.includes('admin')) {
+    if (!roles.includes('dealer')) {
       res.status(403).json({
-        message: 'Access denied: Only admins can assign recyclers',
+        message: 'Access denied: Only dealers can assign recyclers',
       });
       return;
     }
@@ -2670,33 +3019,36 @@ const assignRecycler = async (req: AuthRequest, res: Response): Promise<void> =>
       userId: recyclerId,
       message,
       type: "recycler-assignment",
-      link: `/donation/${donation._id}`,
+      link: `/processedData`,
     });
 
     // Send via socket.io
     io.to(recyclerId).emit("newNotification", {
+      userId: recyclerId,                   // added userId
+      notificationId: notification._id,    // added notificationId
       message: notification.message,
-      notificationId: notification._id,
       link: notification.link,
     });
 
     // Send Firebase push
-    const recyclerUser = await User.findById(recyclerId, "fcmTokens"); // ✅ renamed
+    const recyclerUser = await User.findById(recyclerId, "fcmTokens");
     if (recyclerUser?.fcmTokens?.length) {
       try {
         await admin.messaging().sendEachForMulticast({
-          tokens: recyclerUser.fcmTokens,
+          tokens: recyclerUser.fcmTokens.map(t => t.token),
           notification: {
             title: "New Assignment",
             body: message,
           },
           data: {
             type: "recycler-assignment",
-            donationId: (donation._id as any).toString(),
+            donationId: String(donation._id),
+            userId: String(recyclerId),
+            notificationId: String(notification._id),
           },
         });
       } catch (err) {
-        console.error("❌ Firebase push failed for recycler:", recyclerId, err);
+        console.error(" Firebase push failed for recycler:", recyclerId, err);
       }
     }
 
@@ -2781,9 +3133,9 @@ const getRecycleDonations = async (req: Request, res: Response): Promise<Respons
 };
 
 const recyclerUpdateStatus = async (req: Request, res: Response): Promise<Response> => {
-  const { id } = req.params; // Donation ID from params
-  const { status, note } = req.body; // status and note from body
-  const recyclerId = (req.user as IUser)._id; // Type assertion for req.user
+  const { id } = req.params;
+  const { status, note } = req.body;
+  const recyclerId = (req as AuthRequest).user?.userId;
 
   try {
     // Find the donation by ID
@@ -2814,20 +3166,30 @@ const recyclerUpdateStatus = async (req: Request, res: Response): Promise<Respon
     // Save the updated donation
     await donation.save();
 
-    // Emit a notification to the dealer (socket.io + Firebase)
     const io = getIO();
 
     if (donation.dealer && donation.dealer._id) {
       const dealerId = donation.dealer._id.toString();
       const msg = `Recycler updated donation status to '${status}'.`;
 
+      // Save notification in DB
+      const notification = await Notification.create({
+        userId: dealerId,
+        message: msg,
+        type: "donation-update",
+        link: `/donation/${donation._id}`,
+      });
+
       // Socket.io push
       io.to(dealerId).emit("notification", {
+        userId: dealerId,
+        notificationId: notification._id,
         title: "Donation Updated",
         message: msg,
         donationId: donation._id,
         type: "donation-update",
         timestamp: new Date(),
+        link: notification.link,
       });
 
       // Firebase push
@@ -2835,19 +3197,22 @@ const recyclerUpdateStatus = async (req: Request, res: Response): Promise<Respon
       if (dealerUser?.fcmTokens?.length) {
         try {
           await admin.messaging().sendEachForMulticast({
-            tokens: dealerUser.fcmTokens,
+            tokens: dealerUser.fcmTokens.map(t => t.token),
             notification: {
               title: "Donation Updated",
               body: msg,
             },
             data: {
               type: "donation-update",
-              donationId: (donation._id as any).toString(),
+              donationId: String(donation._id),
               status,
+              userId: dealerId,
+              notificationId: String(notification._id),
+              link: notification.link!,
             },
           });
         } catch (err) {
-          console.error("❌ Firebase push failed for dealer:", dealerId, err);
+          console.error(" Firebase push failed for dealer:", dealerId, err);
         }
       }
     } else {
@@ -2858,7 +3223,7 @@ const recyclerUpdateStatus = async (req: Request, res: Response): Promise<Respon
     return res.status(200).json({ success: true, message: "Donation updated", donation });
   } catch (err) {
     console.error("Update recycler status error:", err);
-    return res.status(500).json({ message: "Server error", error: onmessage });
+    return res.status(500).json({ message: "Server error", error: err });
   }
 };
 
@@ -2894,36 +3259,39 @@ const getNotifications = async (req: AuthRequest, res: Response): Promise<void> 
 const googleLogin = async (req: Request, res: Response) => {
   try {
     const { token, phone } = req.body;
-
     if (!token) {
       return res.status(400).json({ message: "No token provided" });
     }
 
-    // ✅ Verify Firebase ID Token
+    // Verify Firebase ID Token
     const decoded = await admin.auth().verifyIdToken(token);
     const { email, name, picture, uid, phone_number } = decoded;
 
-    let user = await User.findOne({ email });
+    if (!email) {
+      return res.status(400).json({ message: "Google account has no email" });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    let user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
-      // ✅ Create minimal user
+      // Create minimal user
       user = new User({
-        email,
+        email: normalizedEmail,
         profileImage: picture,
         providerId: uid,
         roles: ["user"],
         isProfileComplete: false,
       });
-
       await user.save();
 
       return res.status(200).json({
         redirect: true,
-        userId: user._id,
+        userId: String(user._id),
       });
     }
 
-    // ✅ If phone missing, update
+    // If phone missing, update
     if (!user.phone && (phone || phone_number)) {
       user.phone = phone || phone_number;
       await user.save();
@@ -2932,14 +3300,19 @@ const googleLogin = async (req: Request, res: Response) => {
     if (!user.isProfileComplete) {
       return res.status(200).json({
         redirect: true,
-        userId: user._id,
+        userId: String(user._id),
       });
     }
 
-    // ✅ Generate app JWT
+    // Generate app JWT
     const appToken = user.generateToken();
 
-    res.json({ success: true, token: appToken, user });
+    res.json({
+      success: true,
+      token: appToken,
+      user,
+      userId: String(user._id),
+    });
   } catch (err) {
     console.error("Google login error:", err);
     res.status(401).json({ message: "Google login failed" });
@@ -2965,7 +3338,19 @@ const completeProfile = async (req: Request, res: Response) => {
   try {
     const { userId, firstName, lastName, email, phone, roles } = req.body;
 
-    // ✅ update instead of creating new
+    const existingUser = await User.findOne({
+      phone,
+      _id: { $ne: userId }, // Exclude current user
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number already in use",
+      });
+    }
+
+    //  update instead of creating new
     const user = await User.findByIdAndUpdate(
       userId,
       { firstName, lastName, email, phone, roles, isProfileComplete: true },
@@ -2983,30 +3368,15 @@ const completeProfile = async (req: Request, res: Response) => {
   }
 };
 
-// FCM Token Save
-const fcmTokenSave = async (req: any, res: Response) => {
-  try {
-    const { fcmToken } = req.body;
-    if (!fcmToken) {
-      return res.status(400).json({ success: false, message: "FCM token required" });
-    }
 
-    await User.findByIdAndUpdate(req.user.userId, {
-      $addToSet: { fcmTokens: fcmToken }, // prevent duplicates
-    });
 
-    res.status(200).json({ success: true, message: "FCM token saved" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to save token" });
-  }
-};
 
 // Export all controller functions
 export default {
   volunteerSignup,
   signUpAuth,
-  sendOTPAuth,
   signInAuth,
+  logoutAuth,
   forgotPassword,
   resetPassword,
   sendOTPapp,
@@ -3029,6 +3399,7 @@ export default {
   updateDonation,
   getDonationsCount,
   getDonationsCountByStatus,
+  getDonationByIdForUser,
   getMyAssignedTasks,
   getTaskCount,
   getTaskCountByStatus,
@@ -3043,6 +3414,7 @@ export default {
   logoGet,
   gaudaanForm,
   getGaudaanByUserId,
+  getGaudaanById,
   getAssignedGaudaan,
   getAllShelters,
   updategaudaanStatus,
@@ -3055,5 +3427,7 @@ export default {
   googleLogin,
   getUserById,
   completeProfile,
-  fcmTokenSave,
+
+  sendOTPAuth,
+  verifyOTP,
 };

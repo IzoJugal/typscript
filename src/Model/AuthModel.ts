@@ -1,7 +1,23 @@
-// src/Model/AuthModel.ts
-import mongoose, { Document, Model } from 'mongoose';
+import mongoose, { Document, Model, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt, { SignOptions } from 'jsonwebtoken';
+
+interface IFcmToken {
+  token: string;
+  deviceId?: string;
+  lastUpdated?: Date;
+}
+
+interface ISession extends Document {
+  userId: string;
+  ipAddress: string;
+  deviceId?: string;
+  userAgent?: string;
+  loginTime: Date;
+  lastActivity: Date;
+  token: string;
+  isActive: boolean;
+}
 
 export interface IUser extends Document {
   userId: string;
@@ -20,17 +36,37 @@ export interface IUser extends Document {
   profileImage?: string;
   isActive: boolean;
   notificationsEnabled: boolean;
-  fcmTokens?: string[];
+  fcmTokens?: IFcmToken[];
   generateToken(): string;
 }
 
+const sessionSchema = new mongoose.Schema<ISession>(
+  {
+    userId: { type: String, required: true },
+    ipAddress: { type: String, required: true },
+    deviceId: { type: String },
+    userAgent: { type: String },
+    loginTime: { type: Date, default: Date.now },
+    lastActivity: { type: Date, default: Date.now },
+    token: { type: String, required: true },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+// Expire sessions after 30 days
+sessionSchema.index({ loginTime: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+
 const userSchema = new mongoose.Schema<IUser>(
   {
-    firstName: { type: String, },
-    lastName: { type: String, },
-    phone: { type: String, },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, },
+    firstName: { type: String },
+    lastName: { type: String },
+    phone: { type: String, unique: true },
+    email: {
+      type: String, required: true, unique: true,
+      lowercase: true,
+    },
+    password: { type: String },
     resetPasswordToken: String,
     resetPasswordExpires: Date,
     isProfileComplete: { type: Boolean, default: false },
@@ -52,7 +88,15 @@ const userSchema = new mongoose.Schema<IUser>(
     isActive: { type: Boolean, default: true },
     uid: { type: String, unique: true },
     notificationsEnabled: { type: Boolean, default: true },
-    fcmTokens: [{ type: String }],
+    otp: { type: String },
+    otpExpires: { type: Date },
+    fcmTokens: [
+      {
+        token: { type: String, required: true },
+        deviceId: { type: String },
+        lastUpdated: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );
@@ -91,5 +135,6 @@ userSchema.methods.generateToken = function (): string {
 
 export const User: Model<IUser> = mongoose.model<IUser>('User', userSchema);
 export const Admin: Model<IUser> = mongoose.model<IUser>('User', userSchema);
+export const Session: Model<ISession> = mongoose.model<ISession>('Session', sessionSchema);
 
-export default { User, Admin };
+export default { User, Admin, Session };

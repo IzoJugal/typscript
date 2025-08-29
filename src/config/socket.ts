@@ -10,22 +10,29 @@ interface RegisterPayload {
 function init(server: any): Server {
   io = new Server(server, {
     cors: {
-      origin: "*", 
+      origin: "*",
       methods: ["GET", "POST"],
     },
   });
 
   io.on("connection", (socket) => {
-    socket.on("register", ({ userId, notificationsEnabled }: RegisterPayload) => {
+    socket.on("register", (payload: RegisterPayload) => {
+    
+      const { userId, notificationsEnabled } = payload;
+      if (!userId) return;
+
       socket.join(userId);
       socket.data.userId = userId;
-      if (userId) {
-        socket.data.notificationsEnabled = notificationsEnabled ?? true;
-      }
-      socket.data.notificationsEnabled = notificationsEnabled; 
+      socket.data.notificationsEnabled = notificationsEnabled ?? true;
+
+    
     });
 
-    socket.on("disconnect", () => {});
+    socket.on("disconnect", () => {
+      const userId = socket.data?.userId;
+     
+    });
+
   });
 
   return io;

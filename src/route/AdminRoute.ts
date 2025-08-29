@@ -66,6 +66,7 @@ router.route("/pickups/:id").get(adminMiddleware, controller.getDonationById as 
 
 router.route("/activedonations").get(adminMiddleware, controller.getActiveDonations)
 
+router.route('/donations/:id/donated').patch(adminMiddleware, controller.markDonationAsDonated as any);
 
 //History Data
 router.route("/history").get(adminMiddleware, controller.getHistory as any);

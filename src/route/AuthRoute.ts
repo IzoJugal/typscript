@@ -50,7 +50,10 @@ router.post('/volunteer', controller.volunteerSignup as any);
 
 router.post('/signup', controller.signUpAuth as any);
 
+// Firebase OTP Send and Verify
 router.post('/send-otp', controller.sendOTPAuth as any);
+
+router.post('/verify-otp', controller.verifyOTP as any);
 
 router.post('/signin', controller.signInAuth as any);
 
@@ -65,7 +68,7 @@ router.post('/forgot-password', controller.forgotPassword as any);
 router.post('/reset-password/:token', controller.resetPassword as any);
 
 // App Passwoord reset
-router.post("/send-otp", controller.sendOTPapp as any);
+router.post("/sendOTP", controller.sendOTPapp as any);
 
 router.post("/verify-otp", controller.otpVerify as any);
 
@@ -83,19 +86,6 @@ router.get('/profile/image/:filename', controller.getProfileImage as any);
 router.patch('/password', authMiddleware, controller.changePassword as any);
 
 router.get('/impacts', controller.getImpacts as any);
-
-// Donations
-router.post('/donate', authMiddleware, uploadMultiple, controller.createDonation as any);
-
-router.get('/file/:id', controller.getDonationImage as any);
-
-router.get('/donation', authMiddleware, controller.getDonations as any);
-
-router.patch('/donation/:id/update', authMiddleware, controller.updateDonation as any);
-
-router.get('/donations/count', authMiddleware, controller.getDonationsCount as any);
-
-router.get('/donations/count-by-status', authMiddleware, controller.getDonationsCountByStatus as any);
 
 // Volunteer by user
 router.patch('/assign-volunteer', authMiddleware, controller.assignVolunteerRole as any);
@@ -115,15 +105,30 @@ router.delete('/delete-account', authMiddleware, controller.deleteAccount as any
 // Dealers Data
 router.get('/donations/dealer', authMiddleware, controller.getDonationsByDealer as any);
 
-router.get('/donation/:id', authMiddleware, controller.getDonationById as any);
-
 router.get('/getpickupdonations', authMiddleware, controller.getPickupDonations as any);
 
 router.patch('/donation/:id/status', authMiddleware, controller.updateDonationStatus as any);
 
 router.patch('/donations/:id/update', authMiddleware, controller.addPriceandweight as any);
 
-router.get('/donations/history', authMiddleware, controller.getHistory as any);
+router.get('/donation/history', authMiddleware, controller.getHistory as any);
+
+router.get('/donation/:id', authMiddleware, controller.getDonationById as any);
+
+// Donations
+router.post('/donate', authMiddleware, uploadMultiple, controller.createDonation as any);
+
+router.get('/file/:id', controller.getDonationImage as any);
+
+router.get('/donation', authMiddleware, controller.getDonations as any);
+
+router.patch('/donation/:id/update', authMiddleware, controller.updateDonation as any);
+
+router.get('/donations/count', authMiddleware, controller.getDonationsCount as any);
+
+router.get('/donations/count-by-status', authMiddleware, controller.getDonationsCountByStatus as any);
+
+router.get('/donations/:id',authMiddleware,controller.getDonationByIdForUser as any);
 
 // Gaudaan
 router.post('/gaudaan', authMiddleware, gupload.array('images', 2), controller.gaudaanForm as any);
@@ -135,6 +140,8 @@ router.get('/assignedgaudaan', authMiddleware, controller.getAssignedGaudaan as 
 router.get('/shelters', authMiddleware, controller.getAllShelters as any);
 
 router.patch('/updateStatus/:id', authMiddleware, controller.updategaudaanStatus as any);
+
+router.get("/gaudaan/:id", authMiddleware, controller.getGaudaanById as any);
 
 // Recycler
 router.get('/recyclers', authMiddleware, controller.getRecyclers as any);
@@ -154,6 +161,12 @@ router.get("/user/:id", controller.getUserById as any);
 
 router.patch("/complete-profile", controller.completeProfile as any);
 
-router.post("/save-fcm-token", authMiddleware, controller.fcmTokenSave as any);
+router.post('/logout', controller.logoutAuth as any);
+
+
+// MSG91 OTP Send and Verify
+// router.post('/send-otp', controller.sendOTPAuth as any);
+
+// router.post('/verifyOTP', controller.verifyOTP as any);
 
 export default router;
