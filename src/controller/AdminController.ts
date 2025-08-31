@@ -695,6 +695,20 @@ const markDonationAsDonated = async (req: AuthRequest, res: Response): Promise<v
         console.error("Error sending FCM push:", err);
       }
     }
+    // Delete certificate after sending
+    try {
+      if (fs.existsSync(certificatePath)) {
+        try {
+          fs.unlinkSync(certificatePath);
+          console.log("Certificate deleted successfully");
+        } catch (err) {
+          console.error("Failed to delete certificate:", err);
+        }
+      }
+      console.log("Certificate file deleted:", certificatePath);
+    } catch (err) {
+      console.error("Failed to delete certificate file:", err);
+    }
 
     res.status(200).json({
       success: true,

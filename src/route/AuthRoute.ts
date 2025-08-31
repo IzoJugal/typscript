@@ -50,12 +50,13 @@ router.post('/volunteer', controller.volunteerSignup as any);
 
 router.post('/signup', controller.signUpAuth as any);
 
-// Firebase OTP Send and Verify
-router.post('/send-otp', controller.sendOTPAuth as any);
-
-router.post('/verify-otp', controller.verifyOTP as any);
-
 router.post('/signin', controller.signInAuth as any);
+
+// MSG91 OTP Send and Verify
+router.post("/verify-otp", controller.verifyOtp as any);
+router.post("/send-otp", controller.sendOtp as any);
+router.post("/retry-otp", controller.retryOtp as any);
+
 
 // Sliders
 router.get('/sliders', controller.getSliders as any);
@@ -128,7 +129,7 @@ router.get('/donations/count', authMiddleware, controller.getDonationsCount as a
 
 router.get('/donations/count-by-status', authMiddleware, controller.getDonationsCountByStatus as any);
 
-router.get('/donations/:id',authMiddleware,controller.getDonationByIdForUser as any);
+router.get('/donations/:id', authMiddleware, controller.getDonationByIdForUser as any);
 
 // Gaudaan
 router.post('/gaudaan', authMiddleware, gupload.array('images', 2), controller.gaudaanForm as any);
@@ -162,11 +163,5 @@ router.get("/user/:id", controller.getUserById as any);
 router.patch("/complete-profile", controller.completeProfile as any);
 
 router.post('/logout', controller.logoutAuth as any);
-
-
-// MSG91 OTP Send and Verify
-// router.post('/send-otp', controller.sendOTPAuth as any);
-
-// router.post('/verifyOTP', controller.verifyOTP as any);
 
 export default router;

@@ -1,5 +1,6 @@
 // src/controller/AuthController.ts
 import { Request, Response } from 'express';
+import https from 'https';
 import axios, { AxiosResponse } from "axios";
 import mongoose, { Error, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
@@ -22,7 +23,7 @@ import Notification from "../Model/NotificationsModel";
 import Impact from "../Model/Impact";
 import msg91 from 'msg91';
 import admin from "../config/FirebaseAdmin";
-import { error } from 'console';
+import { error, log } from 'console';
 
 let gfs: mongoose.mongo.GridFSBucket;
 const conn = mongoose.connection;
@@ -50,6 +51,7 @@ interface VolunteerSignupBody {
 
 interface SignupBody extends VolunteerSignupBody {
   roles?: string | string[];
+  accessToken: string;
 }
 
 interface SendOTPBody {
@@ -153,85 +155,6 @@ interface AssignRecyclerBody {
   recyclerId: string;
 }
 
-// MSG91 OTP Send and Verify
-const otpStore = new Map<string, { otp: string; expiresAt: number }>();
-
-const sendSMSOTP = async (phone: string, otp: string): Promise<any> => {
-  const msg = `Your Gauabhayaranya OTP is: ${otp}. It expires in 5 minutes.`;
-  const response = await axios.post(
-    'https://control.msg91.com/api/v5/flow/',
-    {
-      flow_id: process.env.MSG91_FLOW_ID,
-      sender: process.env.MSG91_SENDER_ID,
-      mobiles: `91${phone}`,
-      VAR1: otp,
-    },
-    {
-      headers: {
-        authkey: process.env.MSG91_AUTH_KEY,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
-  return response.data;
-};
-
-//  Send OTP for phone authentication
-const sendOTPAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { phone, method } = req.body as SendOTPBody;
-
-  if (!phone || !method) {
-    res.status(400).json({ message: 'Phone and method are required' });
-    return;
-  }
-
-  const otp = Math.floor(1000 + Math.random() * 9000).toString();
-  console.log("OTP", otp)
-  otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
-
-  try {
-    await sendSMSOTP(phone, otp);
-    res.status(200).json({ success: true, message: 'OTP sent successfully' });
-  } catch (error) {
-    console.error('Error sending OTP:', error);
-    res.status(500).json({ success: false, message: 'Error sending OTP' });
-  }
-};
-
-const verifyOTP = async (req: Request, res: Response): Promise<void> => {
-  const { phone, otp } = req.body;
-
-  if (!phone || !otp) {
-    res.status(400).json({ message: 'Phone and OTP are required' });
-    return;
-  }
-
-  const stored = otpStore.get(phone);
-
-  if (!stored) {
-    res.status(400).json({ message: 'OTP not found or expired' });
-    return;
-  }
-
-  const { otp: storedOtp, expiresAt } = stored;
-
-  console.log(`Verifying OTP for ${phone} - Stored OTP: ${storedOtp}, ExpiresAt: ${new Date(expiresAt).toISOString()}, Now: ${new Date().toISOString()}`);
-
-  if (Date.now() > expiresAt) {
-    otpStore.delete(phone); // Clean up expired OTP
-    res.status(400).json({ message: 'OTP expired' });
-    return;
-  }
-
-  if (otp.toString() !== storedOtp.toString()) {
-    res.status(400).json({ message: 'Invalid OTP' });
-    return;
-  }
-
-  // Success
-  otpStore.delete(phone); // Clean up after successful verification
-  res.status(200).json({ success: true, message: 'OTP verified successfully' });
-};
 
 // Volunteer Signup
 const volunteerSignup = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -310,97 +233,341 @@ const volunteerSignup = async (req: AuthRequest, res: Response): Promise<void> =
   }
 };
 
-// User Signup
-const signUpAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { firstName, lastName, phone, email, password, otp, method, roles } = req.body as SignupBody;
+// SEND OTP VIA MSG91
+// Verify OTP Controller
+const verifyOtp = async (req: Request, res: Response): Promise<void> => {
+  const { widgetId, reqId, otp } = req.body;
 
-  if (!firstName) {
-    res.status(400).json({ message: 'Missing First Name' });
-    return;
-  }
-  if (!lastName) {
-    res.status(400).json({ message: 'Missing Last Name' });
-    return;
-  }
-  if (!email) {
-    res.status(400).json({ message: 'Missing Email' });
-    return;
-  }
-  if (!phone) {
-    res.status(400).json({ message: 'Missing Phone Number' });
-    return;
-  }
-  if (!password) {
-    res.status(400).json({ message: 'Missing Password' });
-    return;
-  }
-  if (!otp || !method) {
-    res.status(400).json({ message: 'OTP and method required' });
+  if (!widgetId || !reqId || !otp) {
+    res.status(400).json({ success: false, message: "widgetId, reqId, and otp are required" });
     return;
   }
 
   try {
-    const normalizedEmail = email.toLowerCase();
-
-    // const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { phone }] });
-    // if (existingUser) {
-    //   res.status(400).json({ message: 'Email or phone already in use' });
-    //   return;
-    // }
-
-    let validRoles: string[] = ['user'];
-    if (roles) {
-      const allowedRoles = ['user', 'admin', 'dealer', 'recycler'];
-      const inputRoles = Array.isArray(roles) ? roles : [roles];
-      validRoles = inputRoles.filter((role) => allowedRoles.includes(role));
-      if (validRoles.includes('admin')) {
-        res.status(400).json({ message: 'Cannot assign admin role directly' });
-        return;
+    const response = await axios.post(
+      "https://api.msg91.com/api/v5/widget/verifyOtp",
+      { widgetId, reqId, otp },
+      {
+        headers: {
+          authkey: process.env.MSG91_AUTH_KEY || "your-authkey-here",
+          "content-type": "application/json",
+        },
       }
+    );
+
+    const data = response.data;
+    console.log("MSG91 Verify Response:", data);
+
+    if (data.type === "success" || data.success) {
+      // ✅ Generate JWT token for signup
+      const token = jwt.sign(
+        { reqId, otpVerified: true },
+        process.env.JWT_SECRET || "supersecret",
+        { expiresIn: "10m" } // OTP validity only for signup, short-lived
+      );
+
+      res.json({
+        success: true,
+        message: data.message || "OTP verified successfully",
+        token,
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: data.message || "Invalid OTP",
+      });
     }
-
-    const newUser = await User.create({
-      firstName,
-      lastName,
-      phone,
-      email: normalizedEmail,
-      password,
-      isProfileComplete: true,
-      roles: validRoles,
-    });
-
-    const payload = {
-      userId: newUser._id,
-      email: newUser.email,
-      roles: newUser.roles,
-    };
-
-    const token = jwt.sign(payload, process.env.JWT_SECRET || 'your_jwt_secret', {
-      expiresIn: '1h',
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'User registered successfully',
-      token,
-      user: {
-        _id: newUser._id,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        phone: newUser.phone,
-        email: newUser.email,
-        roles: newUser.roles
-      },
-    });
-  } catch (err) {
-    console.error('Signup Error:', err);
+  } catch (error: any) {
+    console.error("MSG91 verifyOtp error:", error.response?.data || error.message);
     res.status(500).json({
       success: false,
-      message: 'Server error during signup',
-      error: (err as Error).message,
+      message: error.response?.data?.message || "Failed to verify OTP",
     });
   }
 };
+
+// Send OTP Controller
+const sendOtp = async (req: Request, res: Response): Promise<void> => {
+  const { widgetId, identifier } = req.body;
+
+  if (!widgetId || !identifier) {
+    res.status(400).json({ success: false, message: "widgetId and identifier are required" });
+    return;
+  }
+
+  // Normalize identifier: if it's a phone number without country code, prepend 91
+  let normalizedIdentifier = identifier;
+  if (/^\d{10}$/.test(identifier)) {
+    // If it's exactly 10 digits, assume Indian mobile number
+    normalizedIdentifier = "91" + identifier;
+  }
+
+  try {
+    const response = await axios.post(
+      "https://api.msg91.com/api/v5/widget/sendOtp",
+      { widgetId, identifier: normalizedIdentifier },
+      {
+        headers: {
+          authkey: process.env.MSG91_AUTH_KEY || "your-widget-authkey",
+          "content-type": "application/json",
+        },
+      }
+    );
+
+    const data = response.data;
+    console.log("MSG91 Response:", data);
+
+    if (data.type === "success") {
+      // Normalize reqId (sometimes comes in "message" field)
+      const reqId = data.reqId || data.message;
+
+      res.json({
+        success: true,
+        reqId,
+        message: "OTP sent successfully",
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: data.message || "Failed to send OTP",
+      });
+    }
+  } catch (error: any) {
+    console.error("MSG91 sendOtp error:", error.response?.data || error.message);
+
+    res.status(500).json({
+      success: false,
+      message: error.response?.data?.message || "Failed to send OTP",
+    });
+  }
+};
+
+// Retry OTP Controller
+const retryOtp = async (req: Request, res: Response): Promise<void> => {
+  const { widgetId, reqId } = req.body;
+
+  if (!widgetId || !reqId) {
+    res.status(400).json({ success: false, message: "widgetId and reqId are required" });
+    return;
+  }
+
+  try {
+    const { data } = await axios.post(
+      "https://api.msg91.com/api/v5/widget/retryOtp",
+      { widgetId, reqId },
+      {
+        headers: {
+          authkey: process.env.MSG91_AUTH_KEY || "your-widget-authkey",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // Forward MSG91 success as success
+    if (data.type === "success" || data.success) {
+      res.status(200).json({ success: true, message: data.message || "OTP resent" });
+    } else {
+      res.status(400).json({ success: false, message: data.message || "Failed to resend OTP" });
+    }
+  } catch (err: any) {
+    console.error("MSG91 Retry OTP error:", err.response?.data || err.message);
+    res.status(err.response?.status || 500).json({
+      success: false,
+      message: err.response?.data?.message || "Failed to resend OTP",
+    });
+  }
+};
+
+
+// User Signup
+const signUpAuth = async (req: Request, res: Response): Promise<void> => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ success: false, message: "No OTP token provided" });
+    return;
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || "supersecret");
+
+    if (!decoded.otpVerified || !decoded.reqId) {
+      res.status(403).json({ success: false, message: "OTP verification required" });
+      return;
+    }
+
+    const { firstName, lastName, phone, email, password, roles } = req.body;
+
+    if (!firstName || !lastName || !phone || !email || !password) {
+      res.status(400).json({ success: false, message: "All fields are required" });
+      return;
+    }
+
+    // ✅ Check if user already exists
+    const existingUser = await User.findOne({ $or: [{ phone }, { email }] });
+    if (existingUser) {
+      res.status(400).json({ success: false, message: "Phone or email already registered" });
+      return;
+    }
+
+    // ✅ Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // ✅ Save user
+    const newUser = new User({
+      firstName,
+      lastName,
+      phone,
+      email,
+      password: hashedPassword,
+      roles: roles || ["user"],
+      isProfileComplete: true,
+    });
+
+    await newUser.save();
+
+    // Issue login token
+    const userToken = jwt.sign(
+      { userId: newUser._id, email: newUser.email, roles: newUser.roles },
+      process.env.JWT_SECRET || "supersecret",
+      { expiresIn: "1h" }
+    );
+
+    res.json({ success: true, token: userToken, user: newUser });
+  } catch (err: any) {
+    console.error("Signup error:", err);
+    res.status(401).json({ success: false, message: "Invalid or expired OTP token" });
+  }
+};
+
+// const signUpAuth = async (req: Request, res: Response): Promise<void> => {
+//   const { firstName, lastName, phone, email, password, roles, accessToken } = req.body as SignupBody;
+
+//   // Input Validation
+//   if (!firstName) {
+//     res.status(400).json({ success: false, message: "Missing First Name" });
+//     return;
+//   }
+//   if (!lastName) {
+//     res.status(400).json({ success: false, message: "Missing Last Name" });
+//     return;
+//   }
+//   if (!phone || !/^\d{10}$/.test(phone)) {
+//     res.status(400).json({ success: false, message: "Invalid Phone Number" });
+//     return;
+//   }
+//   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+//     res.status(400).json({ success: false, message: "Invalid Email" });
+//     return;
+//   }
+//   if (!password || password.length < 6) {
+//     res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+//     return;
+//   }
+//   if (!accessToken) {
+//     console.warn("⚠️ Access token missing");
+//     res.status(400).json({ success: false, message: "Access token required" });
+//     return;
+//   }
+
+//   try {
+//     const normalizedEmail = email.toLowerCase();
+
+//     // Check for existing user
+//     const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { phone }] });
+//     if (existingUser) {
+//       console.warn("❌ Email or phone already in use:", { email: normalizedEmail, phone });
+
+//       res.status(400).json({ success: false, message: "Email or phone already in use" });
+//       return;
+//     }
+
+//     // Verify MSG91 access token
+//     console.log("🔐 Verifying OTP with MSG91...");
+//     const verifyResponse = await axios.post(
+//       process.env.MSG91_VERIFY_URL || "",
+//       {
+//         authkey: process.env.MSG91_AUTH_KEY,
+//         'access-token': accessToken,
+//       },
+//       {
+//         headers: {
+//           'Content-Type': 'application/json',
+//           Accept: 'application/json',
+//         },
+//       }
+//     );
+//     console.log("✅ OTP verification response:", verifyResponse.data);
+
+//     if (verifyResponse.data.type !== "success") {
+//       console.warn("❌ OTP verification failed:", verifyResponse.data);
+
+//       res.status(400).json({ success: false, message: verifyResponse.data.message || "OTP verification failed" });
+//       return;
+//     }
+
+//     // Validate roles
+//     let validRoles: string[] = ["user"];
+//     if (roles) {
+//       const allowedRoles = ["user", "admin", "dealer", "recycler"];
+//       const inputRoles = Array.isArray(roles) ? roles : [roles];
+//       validRoles = inputRoles.filter((role) => allowedRoles.includes(role));
+//       if (validRoles.includes("admin")) {
+//         res.status(400).json({ success: false, message: "Cannot assign admin role directly" });
+//         return;
+//       }
+//     }
+
+//     // Hash password
+//     const salt = await bcrypt.genSalt(10);
+//     const hashedPassword = await bcrypt.hash(password, salt);
+
+//     // Create new user
+//     const newUser = await User.create({
+//       firstName,
+//       lastName,
+//       phone,
+//       email: normalizedEmail,
+//       password: hashedPassword,
+//       isProfileComplete: true,
+//       roles: validRoles,
+//     });
+
+//     // Generate JWT
+//     const payload = {
+//       userId: newUser._id,
+//       email: newUser.email,
+//       roles: newUser.roles,
+//     };
+
+//     const token = jwt.sign(payload, process.env.JWT_SECRET || "your_jwt_secret", {
+//       expiresIn: "1h",
+//     });
+
+//     res.status(200).json({
+//       success: true,
+//       message: "User registered successfully",
+//       token,
+//       user: {
+//         _id: newUser._id,
+//         firstName: newUser.firstName,
+//         lastName: newUser.lastName,
+//         phone: newUser.phone,
+//         email: newUser.email,
+//         roles: newUser.roles,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Signup Error:", err);
+//     res.status(500).json({
+//       success: false,
+//       message: "Server error during signup",
+//       error: (err as Error).message,
+//     });
+//   }
+// };
 
 // Sign In
 const signInAuth = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -3427,7 +3594,8 @@ export default {
   googleLogin,
   getUserById,
   completeProfile,
-
-  sendOTPAuth,
-  verifyOTP,
+  // Msg91
+  sendOtp,
+  verifyOtp,
+  retryOtp
 };
