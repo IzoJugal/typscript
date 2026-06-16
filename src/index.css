@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* For Webkit Browsers (Chrome, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  /* Adjust the width of the scrollbar */
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #8A6B8A;
+  border-radius: 9999px;
+  /* Rounded corners */
+}
+
+::-webkit-scrollbar-track {
+  background-color: #EFE9EF;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #745774;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: #4F2B41;
+}
+
+/*-----  scrollbar width   -----*/
+@-moz-document url-prefix() {
+  * {
+    scrollbar-width: thin !important;
+    scrollbar-color: #8A6B8A  #EFE9EF;
+  }
+}
+
+@media print {
+  .hide-on-print {
+    display: none !important;
+  }
+}
+
+@media print {
+
+  /* Remove all backgrounds */
+  * {
+    background: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    color: black !important;
+    /* border: none !important; */
+  }
+
+  /* Ensure white background for print */
+  body {
+    background-color: white !important;
+  }
+
+  /* Remove margins and padding that affect print layout */
+  @page {
+    margin: 0 auto;
+    size: auto;
+  }
+
+  /* Hide unwanted elements (optional) */
+  header,
+  .taskbar,
+  .navbar,
+  .breadcrumb,
+  .sidebar {
+    display: none !important;
+    width: 0 !important;
+  }
+
+  .layout-container {
+    display: block !important;
+  }
+
+  .main-content {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  /* Remove extra spacing and effects */
+  div,
+  span {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+}
+
+/* .flag-dropdown {
+  display: none !important;
+}
+
+/* custom.css */
+.phone-input-container {
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+/* Override react-phone-input-2 default styling so it matches the dashboard */
+.react-tel-input {
+  font-family: inherit !important;
+}
+
+.react-tel-input .form-control {
+  @apply w-full h-[44px] text-base rounded-xl border border-gray-300 bg-white text-gray-900 shadow-sm dark:bg-DARK-700 dark:border-DARK-600 dark:text-DARK-100 transition-all duration-200 !important;
+  font-family: inherit !important;
+}
+
+.react-tel-input .form-control:focus {
+  @apply ring-2 ring-BRAND-500/20 border-BRAND-500 !important;
+}
+
+/* Flag & Details */
+.react-tel-input .flag-dropdown {
+  @apply border-transparent bg-transparent rounded-l-lg hover:bg-transparent !important;
+}
+.react-tel-input .selected-flag:hover,
+.react-tel-input .selected-flag:focus {
+  @apply bg-gray-50 dark:bg-DARK-700 !important;
+}
+.react-tel-input .country-list {
+  @apply rounded-xl border border-gray-100 bg-white shadow-lg text-gray-900 dark:bg-DARK-800 dark:border-DARK-700 dark:text-DARK-100 !important;
+  font-family: inherit !important;
+  margin-top: 4px; /* Slight spacing below input */
+}
+.react-tel-input .country-list .country:hover,
+.react-tel-input .country-list .country.highlight {
+  @apply bg-gray-50 dark:bg-DARK-700 !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .react-tel-input .form-control {
+    @apply text-sm !important;
+  }
+}
+
+[type='text']:focus,
+[type='email']:focus,
+[type='url']:focus,
+[type='password']:focus,
+[type='number']:focus,
+[type='date']:focus,
+[type='datetime-local']:focus,
+[type='month']:focus,
+[type='search']:focus,
+[type='tel']:focus,
+[type='time']:focus,
+[type='week']:focus,
+[multiple]:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  outline-offset: 0 !important;
+  --tw-ring-inset: initial !important;
+  --tw-ring-offset-width: 0px !important;
+  --tw-ring-offset-color: initial !important;
+  --tw-ring-color: initial !important;
+  --tw-ring-offset-shadow: none !important;
+  --tw-ring-shadow: none !important;
+  box-shadow: none !important;
+  border-color: initial !important;
+}
+
+.background-custom {
+  background-color: #F9F5F7;
+  background-image: url(../public/images/pattern-bg.png);
+  background-position: 100%;
+  background-size: cover;
+  background-repeat: repeat;
+  background-position: 100;
+}
+
+.bg-video-content:before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background-color: #000;
+  opacity: 0.4;
+}
+
+.time-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  display: none;
+}
+
+.time-input::-webkit-inner-spin-button,
+.time-input::-webkit-clear-button {
+  display: none;
+}
+
+input[type="time"]::-webkit-calendar-picker-indicator {
+  display: none;
+  -webkit-appearance: none;
+}
+
+input[type="time"]::-webkit-inner-spin-button,
+input[type="time"]::-webkit-clear-button {
+  display: none;
+}

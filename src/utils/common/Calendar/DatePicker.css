@@ -1,0 +1,37 @@
+/* Ensure high specificity with custom themes */
+.datepicker-day-selected, 
+.datepicker-day-today, 
+button[aria-selected="true"], 
+button[aria-current="date"] {
+    background-color: #f97316 !important; /* Orange */
+    color: white !important;
+    font-weight: bold !important;
+    border-radius: 0.5rem !important;
+}
+
+.datepicker-day:hover, 
+button:hover {
+    background-color: #ea580c !important; /* Darker orange */
+    color:white !important;
+}
+.datepicker-day::selection, 
+button::selection {
+    background-color: #ea580c !important; /* Darker orange */
+    color:white !important;
+}
+.datepicker-day:focus.button{
+    background-color: #ea580c !important; /* Darker orange */
+    color:white !important;
+}
+.datepicker-footer button {
+    background-color: #f97316 !important;
+    color: white !important;
+}
+
+.datepicker-footer button:hover {
+    background-color: #ea580c !important;
+}
+
+.pick-date .mt-2.flex.space-x-2 button:nth-child(1){
+    background-color: #ea580c !important;
+}
